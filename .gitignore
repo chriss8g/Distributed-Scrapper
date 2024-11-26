@@ -1,4 +1,5 @@
-config.py
-services/__pycache__
-controllers/__pycache__
-__pycache__
+server/config.py
+server/services/__pycache__
+server/controllers/__pycache__
+server/__pycache__
+client/__pycache__
