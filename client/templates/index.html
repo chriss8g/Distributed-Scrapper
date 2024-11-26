@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scraping System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-top: 20px;
+        }
+
+        #scrape-form {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        #scrape-form input, #scrape-form button {
+            padding: 10px;
+            margin: 5px;
+            font-size: 16px;
+        }
+
+        #scrape-form input {
+            width: 300px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        #scrape-form button {
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #scrape-form button:hover {
+            background-color: #0056b3;
+        }
+
+        #news-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .news-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .news-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .news-card img {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+        }
+
+        .news-card-content {
+            padding: 15px;
+        }
+
+        .news-card h3 {
+            margin: 0;
+            font-size: 18px;
+            color: #007BFF;
+        }
+
+        .news-card h3:hover {
+            text-decoration: underline;
+        }
+
+        .news-card p {
+            margin: 10px 0;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .news-card .info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #888;
+        }
+
+        #save-news {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #save-news:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <h1>Noticias</h1>
+    <form id="scrape-form">
+        <input type="text" id="keyword" placeholder="Ingresa una palabra clave..." />
+        <button type="submit">Buscar</button>
+    </form>
+    <div id="news-container"></div>
+    <button id="save-news">Guardar en la base de datos</button>
+
+    <script>
+        let news = [];
+
+        document.getElementById("scrape-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const keyword = document.getElementById("keyword").value;
+            if (!keyword) {
+                alert("Por favor, ingrese una palabra clave.");
+                return;
+            }
+            const response = await fetch('http://localhost:5000/scrape?keyword=' + keyword);
+            news = await response.json();
+            const container = document.getElementById("news-container");
+            if (news.error) {
+                container.innerHTML = `<p>${news.error}</p>`;
+            } else {
+                container.innerHTML = news.map(n => `
+                    <div class="news-card">
+                        <img src="${n.imagen}" alt="${n.titulo}">
+                        <div class="news-card-content">
+                            <h3><a href="${n.enlace}" target="_blank">${n.titulo}</a></h3>
+                            <p>${n.resumen}</p>
+                            <div class="info">
+                                <span>${n.seccion}</span>
+                                <span>${n.comentarios} comentarios</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join("");
+            }
+        });
+
+        document.getElementById("save-news").addEventListener("click", async () => {
+            if (news.length === 0) {
+                alert("No hay noticias para guardar.");
+                return;
+            }
+            const response = await fetch('http://localhost:5000/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(news)
+            });
+            const result = await response.json();
+            alert(result.status === "Success" ? "Noticias guardadas con éxito!" : "Error al guardar noticias.");
+        });
+    </script>
+</body>
+</html>
