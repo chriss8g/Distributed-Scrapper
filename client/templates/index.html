@@ -20,20 +20,25 @@
 
         #scrape-form {
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            align-items: center;
             margin: 20px 0;
         }
 
-        #scrape-form input, #scrape-form button {
+        #scrape-form input, #scrape-form button, #scrape-form label {
             padding: 10px;
             margin: 5px;
             font-size: 16px;
         }
 
-        #scrape-form input {
+        #scrape-form input[type="url"] {
             width: 300px;
             border: 1px solid #ccc;
             border-radius: 5px;
+        }
+
+        #scrape-form input[type="checkbox"] {
+            margin-right: 5px;
         }
 
         #scrape-form button {
@@ -122,7 +127,12 @@
 <body>
     <h1>Noticias</h1>
     <form id="scrape-form">
-        <input type="text" id="keyword" placeholder="Ingresa una palabra clave..." />
+        <input type="url" id="url" placeholder="Ingresa una URL..." required />
+        <div>
+            <label><input type="checkbox" id="download-html" value="html"> Descargar HTML</label>
+            <label><input type="checkbox" id="download-links" value="links"> Descargar Enlaces</label>
+            <label><input type="checkbox" id="download-files" value="files"> Descargar Archivos</label>
+        </div>
         <button type="submit">Buscar</button>
     </form>
     <div id="news-container"></div>
@@ -133,12 +143,22 @@
 
         document.getElementById("scrape-form").addEventListener("submit", async (e) => {
             e.preventDefault();
-            const keyword = document.getElementById("keyword").value;
-            if (!keyword) {
-                alert("Por favor, ingrese una palabra clave.");
+            const url = document.getElementById("url").value;
+            const downloadOptions = [];
+            if (document.getElementById("download-html").checked) downloadOptions.push('html');
+            if (document.getElementById("download-links").checked) downloadOptions.push('links');
+            if (document.getElementById("download-files").checked) downloadOptions.push('files');
+
+            if (downloadOptions.length === 0) {
+                alert("Por favor, seleccione al menos una opción de descarga.");
                 return;
             }
-            const response = await fetch('http://localhost:5000/scrape?keyword=' + keyword);
+
+            const response = await fetch('http://localhost:5000/scrape', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, options: downloadOptions })
+            });
             news = await response.json();
             const container = document.getElementById("news-container");
             if (news.error) {
