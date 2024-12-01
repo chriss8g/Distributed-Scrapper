@@ -1,21 +1,12 @@
 from flask import Flask
 from flask_cors import CORS
-from controllers.scrape_controller import scrape_bp, task_queue, workers
+from controllers.scrape_controller import scrape_bp, stop_workers
 
 app = Flask(__name__)
 CORS(app)
 
 # Registrar Blueprints
 app.register_blueprint(scrape_bp)
-
-def stop_workers():
-    """
-    Finaliza todos los trabajadores de forma ordenada al cerrar la aplicación.
-    """
-    for _ in workers:
-        task_queue.put(None)  # Coloca un marcador para detener los hilos
-    for worker in workers:
-        worker.join()  # Espera a que terminen todos los hilos
 
 if __name__ == "__main__":
     try:
