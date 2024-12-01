@@ -8,6 +8,11 @@ CORS(app)
 # Registrar Blueprints
 app.register_blueprint(scrape_bp)
 
+# Agregar un endpoint / para verificar si la aplicación está corriendo
+@app.route('/')
+def health_check():
+    return 'running'
+
 if __name__ == "__main__":
     try:
         print("Iniciando aplicación Flask...")

@@ -8,7 +8,7 @@ SERVERS_SUBNET="10.0.11.0/24"
 
 # Configuración de contenedores
 ROUTER_NAME="router"
-ROUTER_CLIENTS_IP="10.0.10.1"
+ROUTER_CLIENTS_IP="10.0.10.254"
 ROUTER_SERVERS_IP="10.0.11.1"
 
 SERVER_NAME="server1"
@@ -18,6 +18,7 @@ SERVER_PORT=5000
 CLIENT_IMAGE="cliente:latest"
 SERVER_IMAGE="servidor:latest"
 ROUTER_IMAGE="router:latest"
+BASE_IMAGE="server:base"  # Nombre de la imagen base
 
 CLIENT_BASE_IP="10.0.10."
 CLIENT_START_PORT=3000
@@ -27,6 +28,7 @@ NUM_CLIENTS=3
 ROUTER_DIR="./router"
 SERVER_DIR="./server"
 CLIENT_DIR="./client"
+BASE_DIR="./"  # Directorio del Dockerfile base
 
 # Función para crear una red si no existe
 create_network_if_not_exists() {
@@ -50,7 +52,11 @@ build_image_if_not_exists() {
   fi
 }
 
-# Construir imágenes
+# Construir la imagen base si no existe
+echo "Verificando y construyendo imagen base si es necesario..."
+build_image_if_not_exists $BASE_IMAGE $BASE_DIR
+
+# Construir las imágenes de cliente y servidor
 echo "Verificando y construyendo imágenes si es necesario..."
 build_image_if_not_exists $ROUTER_IMAGE $ROUTER_DIR
 build_image_if_not_exists $SERVER_IMAGE $SERVER_DIR
@@ -61,12 +67,10 @@ echo "Verificando y creando redes si es necesario..."
 create_network_if_not_exists $CLIENTS_NET $CLIENTS_SUBNET
 create_network_if_not_exists $SERVERS_NET $SERVERS_SUBNET
 
-# Iniciar el router
 echo "Iniciando el router..."
-docker run -d --name $ROUTER_NAME --privileged \
-  --network $CLIENTS_NET --ip $ROUTER_CLIENTS_IP $ROUTER_IMAGE || { echo "Error al iniciar el router";  }
-
-docker network connect $SERVERS_NET $ROUTER_NAME --ip $ROUTER_SERVERS_IP || { echo "Error al conectar el router a la red de servidores";  }
+docker run -itd --rm --name $ROUTER_NAME $ROUTER_IMAGE
+docker network connect --ip 10.0.10.254 $CLIENTS_NET $ROUTER_NAME
+docker network connect --ip 10.0.11.254 $SERVERS_NET $ROUTER_NAME
 
 # Iniciar clientes
 echo "Iniciando clientes..."
@@ -86,10 +90,8 @@ docker run --rm -d --name $SERVER_NAME --cap-add NET_ADMIN \
 
 # Configura reglas de iptables en el router
 echo "Configurando reglas de iptables en el router..."
-docker exec $ROUTER_NAME sh -c "
-  iptables -t nat -A PREROUTING -p tcp --dport $SERVER_PORT -j DNAT --to-destination $SERVER_IP:$SERVER_PORT;
-  iptables -t nat -A POSTROUTING -j MASQUERADE
-"
+docker exec $ROUTER_NAME sh -c "iptables -t nat -A PREROUTING -p tcp --dport $SERVER_PORT -j DNAT --to-destination $SERVER_IP:$SERVER_PORT"
+docker exec $ROUTER_NAME sh -c "iptables -t nat -A POSTROUTING -j MASQUERADE"
 
 # Reglas de iptables para los clientes
 for i in $(seq 1 $NUM_CLIENTS); do

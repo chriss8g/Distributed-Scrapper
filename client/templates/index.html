@@ -186,7 +186,7 @@
         const fetchScrapedData = async (url, type) => {
             try {
                 toggleSpinner(true);
-                const response = await fetch(`http://10.0.11.2:5000/scrape?url=${encodeURIComponent(url)}&type=${type}`);
+                const response = await fetch(`http://10.0.11.1/scrape?url=${encodeURIComponent(url)}&type=${type}`);
                 if (!response.ok) throw new Error(`Error ${response.status}: ${response.statusText}`);
                 return await response.json();
             } catch (error) {
@@ -243,7 +243,7 @@
             }
 
             try {
-                const response = await fetch('http://10.0.11.2:5000/save', {
+                const response = await fetch('http://10.0.11.1/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url }),
