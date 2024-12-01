@@ -32,7 +32,7 @@ CLIENT_DIR="./client"
 create_network_if_not_exists() {
   local net_name=$1
   local subnet=$2
-  docker network inspect $net_name >/dev/null 2>&1 || \
+  docker network inspect $net_name >/dev/null 2>&1 || 
   docker network create --subnet=$subnet $net_name
 }
 
@@ -42,7 +42,7 @@ build_image_if_not_exists() {
   local build_dir=$2
   if [[ "$(docker images -q $image_name 2>/dev/null)" == "" ]]; then
     echo "Construyendo imagen $image_name desde $build_dir..."
-    docker build -t $image_name $build_dir
+    docker build -t $image_name $build_dir || { echo "Error al construir la imagen $image_name"; }
   else
     echo "Imagen $image_name ya existe."
   fi
@@ -62,9 +62,9 @@ create_network_if_not_exists $SERVERS_NET $SERVERS_SUBNET
 # Iniciar el router
 echo "Iniciando el router..."
 docker run -d --name $ROUTER_NAME --privileged \
-  --network $CLIENTS_NET --ip $ROUTER_CLIENTS_IP $ROUTER_IMAGE
+  --network $CLIENTS_NET --ip $ROUTER_CLIENTS_IP $ROUTER_IMAGE || { echo "Error al iniciar el router"; }
 
-docker network connect $SERVERS_NET $ROUTER_NAME --ip $ROUTER_SERVERS_IP
+docker network connect $SERVERS_NET $ROUTER_NAME --ip $ROUTER_SERVERS_IP || { echo "Error al conectar el router a la red de servidores"; }
 
 # Iniciar clientes
 echo "Iniciando clientes..."
@@ -73,14 +73,14 @@ for i in $(seq 1 $NUM_CLIENTS); do
   CLIENT_IP="${CLIENT_BASE_IP}$((1 + i))"
   CLIENT_HOST_PORT=$((CLIENT_START_PORT + i - 1))
   echo "Iniciando $CLIENT_NAME en IP $CLIENT_IP y puerto $CLIENT_HOST_PORT..."
-  docker run --rm -d --name $CLIENT_NAME --cap-add NET_ADMIN \
-    --network $CLIENTS_NET --ip $CLIENT_IP -p $CLIENT_HOST_PORT:3000 $CLIENT_IMAGE
+  docker run -d --name $CLIENT_NAME --cap-add NET_ADMIN \
+    --network $CLIENTS_NET --ip $CLIENT_IP -p $CLIENT_HOST_PORT:3000 $CLIENT_IMAGE || { echo "Error al iniciar el cliente $CLIENT_NAME"; }
 done
 
 # Iniciar servidor
 echo "Iniciando servidor..."
-docker run --rm -d --name $SERVER_NAME --cap-add NET_ADMIN \
-  --network $SERVERS_NET --ip $SERVER_IP -p $SERVER_PORT:$SERVER_PORT $SERVER_IMAGE
+docker run -d --name $SERVER_NAME --cap-add NET_ADMIN \
+  --network $SERVERS_NET --ip $SERVER_IP -p $SERVER_PORT:$SERVER_PORT $SERVER_IMAGE || { echo "Error al iniciar el servidor"; }
 
 # Mensajes de éxito y accesos
 echo "Sistema levantado con éxito!"
