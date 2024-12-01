@@ -1,11 +1,13 @@
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
+import time
 
 def scrape_html(url):
     """
     Extrae el contenido HTML completo de la página.
     """
+    time.sleep(5)
     response = requests.get(url)
     if response.status_code != 200:
         raise Exception("Error al acceder al sitio")
@@ -15,6 +17,7 @@ def scrape_links(url):
     """
     Extrae todos los enlaces de una página web.
     """
+    time.sleep(5)
     response = requests.get(url)
     if response.status_code != 200:
         raise Exception("Error al acceder al sitio")
@@ -29,6 +32,7 @@ def scrape_files(url):
     Extrae enlaces a archivos descargables comunes desde una página web,
     incluyendo imágenes, videos y archivos embebidos.
     """
+    time.sleep(5)
     # Realizar la solicitud a la URL proporcionada
     response = requests.get(url)
     if response.status_code != 200:
