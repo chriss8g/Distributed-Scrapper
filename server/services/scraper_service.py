@@ -1,54 +1,67 @@
 import requests
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
 
-def scrape_news(keyword):
-    url = "https://www.juventudrebelde.cu/"  # URL base
+def scrape_html(url):
+    """
+    Extrae el contenido HTML completo de la página.
+    """
     response = requests.get(url)
     if response.status_code != 200:
-        return {"error": "Error al acceder al sitio"}
+        raise Exception("Error al acceder al sitio")
+    return {"html": response.text}
+
+def scrape_links(url):
+    """
+    Extrae todos los enlaces de una página web.
+    """
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception("Error al acceder al sitio")
     
     soup = BeautifulSoup(response.content, 'html.parser')
-    news_list = []
+    links = [urljoin(url, a['href']) for a in soup.find_all('a', href=True)]
+    return {"links": links}
 
-    # Buscar las noticias en el nuevo formato
-    for noticia in soup.find_all('div', class_='item-news-box'):
-        # Extraer sección
-        section_element = noticia.find('span', class_='section')
-        section = section_element.text.strip() if section_element else 'Sin sección'
+ 
+def scrape_files(url):
+    """
+    Extrae enlaces a archivos descargables comunes desde una página web,
+    incluyendo imágenes, videos y archivos embebidos.
+    """
+    # Realizar la solicitud a la URL proporcionada
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception("Error al acceder al sitio")
+    
+    soup = BeautifulSoup(response.content, 'html.parser')
+    file_extensions = [
+        '.pdf', '.doc', '.docx', '.xls', '.xlsx', 
+        '.jpg', '.png', '.jpeg', '.webp', 
+        '.zip', '.mp4', '.mp3', '.avi', '.mkv', 
+        '.ogg', '.wav', '.flac'
+    ]
+    files = []
 
-        # Extraer título
-        titulo_element = noticia.find('span', class_='title')
-        titulo = titulo_element.text.strip() if titulo_element else 'Sin título'
+    # Buscar archivos en enlaces (etiqueta <a>)
+    for a_tag in soup.find_all('a', href=True):
+        href = a_tag['href']
+        full_url = urljoin(url, href)  # Convertir URL relativa a absoluta
+        if any(full_url.lower().endswith(ext) for ext in file_extensions):
+            files.append(full_url)
 
-        # Verificar si el título contiene la palabra clave
-        if keyword.lower() not in titulo.lower():
-            continue
+    # Buscar imágenes (etiqueta <img>)
+    for img_tag in soup.find_all('img', src=True):
+        src = img_tag['src']
+        full_url = urljoin(url, src)  # Convertir URL relativa a absoluta
+        if any(full_url.lower().endswith(ext) for ext in file_extensions):
+            files.append(full_url)
 
-        # Extraer enlace
-        enlace_element = noticia.find('a', href=True)
-        enlace = enlace_element['href'] if enlace_element else 'Sin enlace'
+    # Eliminar duplicados
+    files = list(set(files))
 
-        # Extraer resumen
-        resumen_element = noticia.find('p', class_='sumary')
-        resumen = resumen_element.text.strip() if resumen_element else 'Sin resumen'
-
-        # Extraer comentarios
-        comentarios_element = noticia.find('span', class_='comments')
-        comentarios = comentarios_element.text.strip() if comentarios_element else '0'
-
-        # Extraer imagen
-        imagen_element = noticia.find('img', class_='img-responsive')
-        imagen = imagen_element['src'] if imagen_element else 'Sin imagen'
-
-        # Añadir noticia a la lista
-        news_list.append({
-            "seccion": section,
-            "titulo": titulo,
-            "enlace": enlace,
-            "resumen": resumen,
-            "comentarios": comentarios,
-            "imagen": imagen
-        })
-
-    return news_list
-
+    # Si no se encuentran archivos, retornar un mensaje
+    if not files:
+        return {"message": "No se encontraron archivos descargables en la página."}
+    
+    return {"files": files}

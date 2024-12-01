@@ -1,7 +1,6 @@
-FROM alpine:latest
+from alpine
 
-# Instala herramientas necesarias para el enrutamiento
-RUN apk add --no-cache iptables iproute2
+run echo "net.ipv4.ip_forward=1" | tee -a /etc/sysctl.conf
+run sysctl -p
 
-# Comando para habilitar el forwarding de paquetes
-CMD ["sh", "-c", "echo 1 > /proc/sys/net/ipv4/ip_forward && tail -f /dev/null"]
+cmd /bin/sh
