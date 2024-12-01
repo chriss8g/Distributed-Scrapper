@@ -20,20 +20,25 @@
 
         #scrape-form {
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            align-items: center;
             margin: 20px 0;
         }
 
-        #scrape-form input, #scrape-form button {
+        #scrape-form input, #scrape-form button, #scrape-form label {
             padding: 10px;
             margin: 5px;
             font-size: 16px;
         }
 
-        #scrape-form input {
+        #scrape-form input[type="url"] {
             width: 300px;
             border: 1px solid #ccc;
             border-radius: 5px;
+        }
+
+        #scrape-form input[type="checkbox"] {
+            margin-right: 5px;
         }
 
         #scrape-form button {
@@ -48,14 +53,14 @@
             background-color: #0056b3;
         }
 
-        #news-container {
+        #info-container {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 20px;
             padding: 20px;
         }
 
-        .news-card {
+        .info-card {
             background: #fff;
             border: 1px solid #ddd;
             border-radius: 8px;
@@ -64,45 +69,45 @@
             transition: transform 0.2s, box-shadow 0.2s;
         }
 
-        .news-card:hover {
+        .info-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
 
-        .news-card img {
+        .info-card img {
             width: 100%;
             height: 180px;
             object-fit: cover;
         }
 
-        .news-card-content {
+        .info-card-content {
             padding: 15px;
         }
 
-        .news-card h3 {
+        .info-card h3 {
             margin: 0;
             font-size: 18px;
             color: #007BFF;
         }
 
-        .news-card h3:hover {
+        .info-card h3:hover {
             text-decoration: underline;
         }
 
-        .news-card p {
+        .info-card p {
             margin: 10px 0;
             font-size: 14px;
             color: #555;
         }
 
-        .news-card .info {
+        .info-card .info {
             display: flex;
             justify-content: space-between;
             font-size: 12px;
             color: #888;
         }
 
-        #save-news {
+        #save-info {
             display: block;
             margin: 20px auto;
             padding: 10px 20px;
@@ -114,7 +119,7 @@
             cursor: pointer;
         }
 
-        #save-news:hover {
+        #save-info:hover {
             background-color: #218838;
         }
     </style>
@@ -122,53 +127,84 @@
 <body>
     <h1>Noticias</h1>
     <form id="scrape-form">
-        <input type="text" id="keyword" placeholder="Ingresa una palabra clave..." />
+        <input type="url" id="url" placeholder="Ingresa una URL..." required />
+        <div>
+            <label><input type="checkbox" id="download-html" value="html"> Descargar HTML</label>
+            <label><input type="checkbox" id="download-links" value="links"> Descargar Enlaces</label>
+            <label><input type="checkbox" id="download-files" value="files"> Descargar Archivos</label>
+        </div>
         <button type="submit">Buscar</button>
     </form>
-    <div id="news-container"></div>
-    <button id="save-news">Guardar en la base de datos</button>
+    <div id="info-container"></div>
+    <button id="save-info">Guardar en la base de datos</button>
 
     <script>
-        let news = [];
+        let info = [];
 
         document.getElementById("scrape-form").addEventListener("submit", async (e) => {
             e.preventDefault();
-            const keyword = document.getElementById("keyword").value;
-            if (!keyword) {
-                alert("Por favor, ingrese una palabra clave.");
+            const url = document.getElementById("url").value;
+            const downloadOptions = [];
+            if (document.getElementById("download-html").checked) downloadOptions.push('html');
+            if (document.getElementById("download-links").checked) downloadOptions.push('links');
+            if (document.getElementById("download-files").checked) downloadOptions.push('files');
+
+            if (downloadOptions.length === 0) {
+                alert("Por favor, seleccione al menos una opción de descarga.");
                 return;
             }
-            const response = await fetch('http://localhost:5000/scrape?keyword=' + keyword);
-            news = await response.json();
-            const container = document.getElementById("news-container");
-            if (news.error) {
-                container.innerHTML = `<p>${news.error}</p>`;
-            } else {
-                container.innerHTML = news.map(n => `
-                    <div class="news-card">
-                        <img src="${n.imagen}" alt="${n.titulo}">
-                        <div class="news-card-content">
-                            <h3><a href="${n.enlace}" target="_blank">${n.titulo}</a></h3>
-                            <p>${n.resumen}</p>
-                            <div class="info">
-                                <span>${n.seccion}</span>
-                                <span>${n.comentarios} comentarios</span>
+            const optionsQuery = downloadOptions.join(',');
+            try {
+                const response = await fetch(`http://localhost:5000/scrape?url=${encodeURIComponent(url)}&options=${encodeURIComponent(optionsQuery)}`);
+        
+                // Verifica si la respuesta fue exitosa (código de estado 200-299)
+                if (!response.ok) {
+                    // Si no fue exitosa, lanza un error
+                    throw new Error(`Error ${response.status}: ${response.statusText}`);
+                }
+        
+                // Procesa la respuesta JSON
+                const info = await response.json();
+                const container = document.getElementById("info-container");
+        
+                // Verifica si hay un error en los datos recibidos
+                if (info.error) {
+                    container.innerHTML = `<p>${info.error}</p>`;
+                } else {
+                    container.innerHTML = `
+                        <div>
+                            <h2>HTML</h2>
+                            <div>
+                                ${info.html}
+                            </div>
+                            <h2>Links</h2>
+                            <div>
+                                ${info.links}
+                            </div>
+                            <h2>Files</h2>
+                            <div>
+                                ${info.files}
                             </div>
                         </div>
-                    </div>
-                `).join("");
+                    `
+                }
+            } catch (error) {
+                // Manejo de errores
+                console.error("Error al realizar la solicitud:", error);
+                alert("Hubo un problema al intentar obtener las noticias. Por favor, verifica la URL y vuelve a intentarlo.");
             }
         });
+        
 
-        document.getElementById("save-news").addEventListener("click", async () => {
-            if (news.length === 0) {
+        document.getElementById("save-info").addEventListener("click", async () => {
+            if (info.length === 0) {
                 alert("No hay noticias para guardar.");
                 return;
             }
             const response = await fetch('http://localhost:5000/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(news)
+                body: JSON.stringify(info)
             });
             const result = await response.json();
             alert(result.status === "Success" ? "Noticias guardadas con éxito!" : "Error al guardar noticias.");
