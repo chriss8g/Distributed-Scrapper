@@ -1,13 +1,19 @@
 from flask import Flask
-from controllers.scrape_controller import scrape_bp
-from controllers.db_controller import db_bp
 from flask_cors import CORS
+from controllers.scrape_controller import scrape_bp, stop_workers
 
 app = Flask(__name__)
 CORS(app)
 
+# Registrar Blueprints
 app.register_blueprint(scrape_bp)
-app.register_blueprint(db_bp)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    try:
+        print("Iniciando aplicación Flask...")
+        app.run(debug=True, use_reloader=False)  # `use_reloader=False` para evitar múltiples inicializaciones de hilos
+    except KeyboardInterrupt:
+        print("\nDeteniendo la aplicación...")
+    finally:
+        stop_workers()
+        print("Aplicación cerrada.")
