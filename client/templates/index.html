@@ -241,13 +241,23 @@
                 alert('Please scrape some data before saving.');
                 return;
             }
-
+        
+            const htmlContent = document.querySelector('#html-content iframe').contentDocument.body.innerHTML; // HTML scrapeado
+            const links = Array.from(document.querySelectorAll('#links-content a')).map(link => link.href); // Enlaces scrapeados
+            const files = Array.from(document.querySelectorAll('#files-content a')).map(file => file.href); // Archivos scrapeados
+        
             try {
                 const response = await fetch('http://10.0.11.2:5000/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url }),
+                    body: JSON.stringify({
+                        url: url,
+                        html: htmlContent,
+                        links: links,
+                        files: files
+                    }),
                 });
+        
                 const result = await response.json();
                 alert(result.message || 'Data saved successfully!');
             } catch (error) {
