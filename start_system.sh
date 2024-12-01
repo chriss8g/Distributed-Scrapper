@@ -88,6 +88,6 @@ echo "Accede a los contenedores desde:"
 for i in $(seq 1 $NUM_CLIENTS); do
   CLIENT_IP="${CLIENT_BASE_IP}$((1 + i))"
   CLIENT_HOST_PORT=$((CLIENT_START_PORT + i - 1))
-  echo "  Cliente$i: http://$CLIENT_IP:$CLIENT_HOST_PORT"
+  echo "  Cliente$i: http://$CLIENT_IP:3000"
 done
 echo "  Servidor: http://$SERVER_IP:$SERVER_PORT"
