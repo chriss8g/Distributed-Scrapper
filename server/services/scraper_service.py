@@ -1,32 +1,67 @@
 import requests
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
 
-def scrape_elements(url, elements = ["html", "enlaces", "archivos"]):
+def scrape_html(url):
+    """
+    Extrae el contenido HTML completo de la página.
+    """
     response = requests.get(url)
     if response.status_code != 200:
-        return {"error": "Error al acceder al sitio"}
+        raise Exception("Error al acceder al sitio")
+    return {"html": response.text}
+
+def scrape_links(url):
+    """
+    Extrae todos los enlaces de una página web.
+    """
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception("Error al acceder al sitio")
     
     soup = BeautifulSoup(response.content, 'html.parser')
-    scraped_data = {}
+    links = [urljoin(url, a['href']) for a in soup.find_all('a', href=True)]
+    return {"links": links}
 
-    # Extraer elementos según la lista proporcionada
-    for element in elements:
-        if element == "html":
-            scraped_data["html"] = str(soup)  # Extraer todo el HTML
-        elif element == "links":
-            links = [a['href'] for a in soup.find_all('a', href=True)]
-            scraped_data["links"] = links  # Extraer todos los enlaces
-        elif element == "files":
-            files = []  # Extraer enlaces a documentos
-            for a in soup.find_all('a', href=True):
-                if a['href'].endswith(('.pdf', '.doc', '.docx', '.xls', '.xlsx')):
-                    files.append(a['href'])
-            scraped_data["files"] = files  # Extraer enlaces a archivos
+ 
+def scrape_files(url):
+    """
+    Extrae enlaces a archivos descargables comunes desde una página web,
+    incluyendo imágenes, videos y archivos embebidos.
+    """
+    # Realizar la solicitud a la URL proporcionada
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception("Error al acceder al sitio")
+    
+    soup = BeautifulSoup(response.content, 'html.parser')
+    file_extensions = [
+        '.pdf', '.doc', '.docx', '.xls', '.xlsx', 
+        '.jpg', '.png', '.jpeg', '.webp', 
+        '.zip', '.mp4', '.mp3', '.avi', '.mkv', 
+        '.ogg', '.wav', '.flac'
+    ]
+    files = []
 
-    return scraped_data
+    # Buscar archivos en enlaces (etiqueta <a>)
+    for a_tag in soup.find_all('a', href=True):
+        href = a_tag['href']
+        full_url = urljoin(url, href)  # Convertir URL relativa a absoluta
+        if any(full_url.lower().endswith(ext) for ext in file_extensions):
+            files.append(full_url)
 
-# # Ejemplo de uso
-# url = "https://www.juventudrebelde.cu/"
-# elements_to_scrape = ["html", "enlaces", "archivos"]
-# result = scrape_elements(url, elements_to_scrape)
-# print(result)
+    # Buscar imágenes (etiqueta <img>)
+    for img_tag in soup.find_all('img', src=True):
+        src = img_tag['src']
+        full_url = urljoin(url, src)  # Convertir URL relativa a absoluta
+        if any(full_url.lower().endswith(ext) for ext in file_extensions):
+            files.append(full_url)
+
+    # Eliminar duplicados
+    files = list(set(files))
+
+    # Si no se encuentran archivos, retornar un mensaje
+    if not files:
+        return {"message": "No se encontraron archivos descargables en la página."}
+    
+    return {"files": files}
