@@ -1,6 +1,6 @@
 
 from flask import Blueprint, request, jsonify
-from services.scraper_service import scrape_news
+from services.scraper_service import scrape_elements
 
 scrape_bp = Blueprint('scrape', __name__)
 
@@ -10,5 +10,5 @@ def scrape():
     if not keyword:
         return jsonify({"error": "Falta la palabra clave"}), 400
     
-    data = scrape_news(keyword)
+    data = scrape_elements()
     return jsonify(data)  # Devolver datos en JSON
