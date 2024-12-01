@@ -68,3 +68,9 @@ def update_file(file_id):
 def delete_file(file_id):
     result = delete_file_from_db(file_id)
     return jsonify({"status": result})
+
+@db_bp.route('/save', methods=['POST'])
+def save():
+    scraped_data = request.json  # Datos en formato JSON
+    result = save_scraped_data(scraped_data)
+    return jsonify({"status": result})

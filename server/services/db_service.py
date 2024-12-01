@@ -177,3 +177,94 @@ def delete_file_from_db(file_id):
        if connection.is_connected():
            cursor.close()
            connection.close()
+
+def save_url_data(url_data):
+    try:
+        connection = mysql.connector.connect(**DB_CONFIG)
+        cursor = connection.cursor()
+
+        # Revisar si la URL ya existe
+        cursor.execute("SELECT id FROM URL WHERE enlace=%s", (url_data['enlace'],))
+        result = cursor.fetchone()
+
+        if result:
+            url_id = result[0]
+            # Actualizar el contenido HTML si existe
+            cursor.execute("""
+                UPDATE URL SET html=%s WHERE id=%s
+            """, (url_data['html'], url_id))
+        else:
+            # Insertar nueva URL
+            cursor.execute("""
+                INSERT INTO URL (enlace, html) VALUES (%s, %s)
+            """, (url_data['enlace'], url_data['html']))
+            url_id = cursor.lastrowid  # Obtener el ID de la nueva fila
+
+        connection.commit()
+        return url_id  # Retornar el ID de la URL (existente o nueva)
+    except Exception as e:
+        return f"Error: {str(e)}"
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
+def save_links_data(url_id, links):
+    try:
+        connection = mysql.connector.connect(**DB_CONFIG)
+        cursor = connection.cursor()
+
+        for link in links:
+            cursor.execute("""
+                INSERT INTO Links (siteid, enlace) VALUES (%s, %s)
+            """, (url_id, link))
+
+        connection.commit()
+        return "Links saved successfully."
+    except Exception as e:
+        return f"Error: {str(e)}"
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
+def save_files_data(url_id, files):
+    try:
+        connection = mysql.connector.connect(**DB_CONFIG)
+        cursor = connection.cursor()
+
+        for file in files:
+            cursor.execute("""
+                INSERT INTO Files (siteid, archivo) VALUES (%s, %s)
+            """, (url_id, file))
+
+        connection.commit()
+        return "Files saved successfully."
+    except Exception as e:
+        return f"Error: {str(e)}"
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
+def save_scraped_data(scraped_data):
+    # Desglosar los datos scrapeados
+    url_data = {'enlace': scraped_data['url'], 'html': scraped_data.get('html', None)}
+    links = scraped_data.get('links', [])
+    files = scraped_data.get('files', [])
+
+    # Guardar o actualizar la URL y obtener su ID
+    url_id = save_url_data(url_data)
+
+    if isinstance(url_id, str):  # Si hay un error
+        return url_id
+
+    # Guardar los links si existen
+    if links:
+        result = save_links_data(url_id, links)
+    
+    # Guardar los archivos si existen
+    if files:
+        result = save_files_data(url_id, files)
+
+    return "Data saved successfully."
