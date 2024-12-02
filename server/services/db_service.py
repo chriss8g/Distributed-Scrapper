@@ -1,5 +1,6 @@
 import mysql.connector
 from config import DB_CONFIG
+import html
 
 def save_url_to_db(url_data):
     try:
@@ -182,17 +183,16 @@ def save_url_data(url_data):
     try:
         connection = mysql.connector.connect(**DB_CONFIG)
         cursor = connection.cursor()
-
         # Revisar si la URL ya existe
         cursor.execute("SELECT id FROM URL WHERE enlace=%s", (url_data['enlace'],))
         result = cursor.fetchone()
-
         if result:
             url_id = result[0]
             # Actualizar el contenido HTML si existe
-            cursor.execute("""
-                UPDATE URL SET html=%s WHERE id=%s
-            """, (url_data['html'], url_id))
+            if url_data['html'] != "":
+                cursor.execute("""
+                    UPDATE URL SET html=%s WHERE id=%s
+                """, (html.escape(url_data['html']), url_id))
         else:
             # Insertar nueva URL
             cursor.execute("""
@@ -236,7 +236,7 @@ def save_files_data(url_id, files):
         for file in files:
             cursor.execute("""
                 INSERT INTO Files (siteid, archivo) VALUES (%s, %s)
-            """, (url_id, file))
+            """, (url_id, html.escape(file)))
 
         connection.commit()
         return "Files saved successfully."
@@ -252,7 +252,7 @@ def save_scraped_data(scraped_data):
     url_data = {'enlace': scraped_data['url'], 'html': scraped_data.get('html', None)}
     links = scraped_data.get('links', [])
     files = scraped_data.get('files', [])
-
+    print("aaaaaaaa")
     # Guardar o actualizar la URL y obtener su ID
     url_id = save_url_data(url_data)
 
@@ -264,7 +264,7 @@ def save_scraped_data(scraped_data):
         result = save_links_data(url_id, links)
     
     # Guardar los archivos si existen
-    if files:
+    if len(files) > 0:
         result = save_files_data(url_id, files)
 
     return "Data saved successfully."

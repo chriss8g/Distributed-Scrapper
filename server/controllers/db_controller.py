@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.db_service import save_to_db
+from services.db_service import *
 
 db_bp = Blueprint('db', __name__)
 
