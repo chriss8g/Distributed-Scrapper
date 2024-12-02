@@ -1,6 +1,9 @@
 # Imagen base de Python
 FROM python:3.9-slim
 
+# Instalar curl y ping
+RUN apt-get update && apt-get install -y curl iputils-ping
+
 # Establece el directorio de trabajo dentro del contenedor
 WORKDIR /app
 

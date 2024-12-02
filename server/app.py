@@ -8,10 +8,15 @@ CORS(app)
 # Registrar Blueprints
 app.register_blueprint(scrape_bp)
 
+# Agregar un endpoint / para verificar si la aplicación está corriendo
+@app.route('/')
+def health_check():
+    return 'running'
+
 if __name__ == "__main__":
     try:
         print("Iniciando aplicación Flask...")
-        app.run(debug=True, use_reloader=False)  # `use_reloader=False` para evitar múltiples inicializaciones de hilos
+        app.run(debug=True, host='0.0.0.0', use_reloader=False)  # `use_reloader=False` para evitar múltiples inicializaciones de hilos
     except KeyboardInterrupt:
         print("\nDeteniendo la aplicación...")
     finally:
