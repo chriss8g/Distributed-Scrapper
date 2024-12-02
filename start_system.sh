@@ -9,7 +9,7 @@ SERVERS_SUBNET="10.0.11.0/24"
 # Configuración de contenedores
 ROUTER_NAME="router"
 ROUTER_CLIENTS_IP="10.0.10.254"
-ROUTER_SERVERS_IP="10.0.11.1"
+ROUTER_SERVERS_IP="10.0.11.254"
 
 SERVER_NAME="server1"
 SERVER_IP="10.0.11.2"
@@ -68,9 +68,10 @@ create_network_if_not_exists $CLIENTS_NET $CLIENTS_SUBNET
 create_network_if_not_exists $SERVERS_NET $SERVERS_SUBNET
 
 echo "Iniciando el router..."
-docker run -itd --rm --name $ROUTER_NAME $ROUTER_IMAGE
-docker network connect --ip 10.0.10.254 $CLIENTS_NET $ROUTER_NAME
-docker network connect --ip 10.0.11.254 $SERVERS_NET $ROUTER_NAME
+docker run -d --rm --privileged --name $ROUTER_NAME $ROUTER_IMAGE
+
+docker network connect $CLIENTS_NET $ROUTER_NAME
+docker network connect $SERVERS_NET $ROUTER_NAME
 
 # Iniciar clientes
 echo "Iniciando clientes..."
@@ -90,7 +91,7 @@ docker run --rm -d --name $SERVER_NAME --cap-add NET_ADMIN \
 
 # Configura reglas de iptables en el router
 echo "Configurando reglas de iptables en el router..."
-docker exec $ROUTER_NAME sh -c "iptables -t nat -A PREROUTING -p tcp --dport $SERVER_PORT -j DNAT --to-destination $SERVER_IP:$SERVER_PORT"
+docker exec $ROUTER_NAME sh -c "iptables -t nat -A PREROUTING -p tcp --dport $SERVER_PORT -j DNAT --to-destination $SERVER_IP:$SERVER_PORT;"
 docker exec $ROUTER_NAME sh -c "iptables -t nat -A POSTROUTING -j MASQUERADE"
 
 # Reglas de iptables para los clientes
