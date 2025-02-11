@@ -7,7 +7,7 @@ app = Flask(__name__)
 # Nodo actual
 current_node = None
 # Cantidad de bits en el anillo
-bits = 160
+bits = 12
 
 class Node:
     def __init__(self, ip):
@@ -19,6 +19,12 @@ class Node:
     def __repr__(self):
         return f"Node(IP={self.ip}, ID={self.id})"
 
+@app.route('/data', methods=['GET'])
+def data():
+    """Muestra la data almacenada"""
+    global current_node
+    return jsonify({"message": ', '.join(i for i in current_node.data.keys())}), 200
+
 
 @app.route('/join', methods=['POST'])
 def join():
@@ -26,7 +32,7 @@ def join():
     global current_node
     data = request.json
     new_node_ip = data['ip']
-    new_node_id = hash_key(new_node_ip)
+    new_node_id = hash_key(new_node_ip, bits)
 
     if not current_node.successor:
         requests.post(f"http://{new_node_ip}/set_successor", json={'ip': current_node.ip})
@@ -59,7 +65,7 @@ def store():
     global current_node
     data = request.json
     url = data['url']
-    url_id = hash_key(url)
+    url_id = hash_key(url, bits)
 
     if is_responsible(url_id, current_node):
         current_node.data[url] = url_id
@@ -74,7 +80,7 @@ def get():
     """Recupera una URL desde el nodo responsable."""
     global current_node
     url = request.args.get('url')
-    url_id = hash_key(url)
+    url_id = hash_key(url, bits)
 
     if is_responsible(url_id, current_node):
         if url in current_node.data:
@@ -91,7 +97,7 @@ def is_responsible(key_id, node):
     if node.id < node.successor.id:
         return node.id < key_id < node.successor.id
     else:
-        return (node.id < key_id < bits) or (0 < key_id < node.successor.id)
+        return (node.id < key_id < 2**bits) or (0 < key_id < node.successor.id)
 
 
 if __name__ == '__main__':
