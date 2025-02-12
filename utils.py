@@ -27,12 +27,9 @@ def is_responsible(key_id, node):
     else:
         return (node.id < key_id < 2**bits) or (0 < key_id < node.successor.id)
 
-# Nombre del archivo CSV
-CSV_FILE = '-data_storage.csv'
-
 def load_data(index):
     """Carga los datos desde el archivo CSV."""
-    CSV_FILE = index + CSV_FILE
+    CSV_FILE = f'{index}-data_storage.csv'
     if not os.path.exists(CSV_FILE):
         return {}
     with open(CSV_FILE, mode='r') as file:
@@ -41,7 +38,7 @@ def load_data(index):
 
 def save_data(index, data):
     """Guarda los datos en el archivo CSV."""
-    CSV_FILE = index + CSV_FILE
+    CSV_FILE = f'{index}-data_storage.csv'
     with open(CSV_FILE, mode='w', newline='') as file:
         writer = csv.writer(file)
         for url, url_id in data.items():
