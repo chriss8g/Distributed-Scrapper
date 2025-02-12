@@ -84,7 +84,7 @@ def store():
         data = load_data(index)
         data[url] = url_id
         save_data(index, data)
-        print(index)
+        
         if index == 0:
             requests.post(f"http://{current_node.successor.ip}/store?index=1", json={'url': url})
             requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
@@ -94,6 +94,9 @@ def store():
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
         elif index == 2:
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
+        
+        return jsonify({"message": f"Comportamiento anomalo"}), 300
+
     else:
         # Reenviar la solicitud al sucesor
         requests.post(f"http://{current_node.successor.ip}/store?index=0", json={'url': url})
