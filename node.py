@@ -12,6 +12,7 @@ def data():
     """Muestra la data almacenada"""
     global current_node
     index = request.args.get('index')
+    index = index if index else 0
     data = load_data(index)
     return jsonify({"message": ', '.join(data.keys())}), 200
 
@@ -73,6 +74,7 @@ def store():
     """Almacena una URL en el nodo responsable."""
     global current_node
     index = request.args.get('index')
+    index = index if index else 0
     data = request.json
     url = data['url']
     url_id = hash_key(url)
@@ -84,18 +86,18 @@ def store():
         save_data(index, data)
 
         if index == 0:
-            response = requests.post(f"http://{current_node.successor.ip}/store?index=1", json={'url': url})
-            response = requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
+            requests.post(f"http://{current_node.successor.ip}/store?index=1", json={'url': url})
+            requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
         elif index == 1:
-            response = requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
+            requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
         elif index == 2:
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
     else:
         # Reenviar la solicitud al sucesor
-        response = requests.post(f"http://{current_node.successor.ip}/store?index=0", json={'url': url})
-        return response.json(), 200
+        requests.post(f"http://{current_node.successor.ip}/store?index=0", json={'url': url})
+        return jsonify({"message": "Claves almacenadas correctamente"}), 200
 
 @app.route('/get', methods=['GET'])
 def get():
@@ -120,6 +122,7 @@ def receive_keys():
     """Recibe las claves transferidas desde otro nodo."""
     global current_node
     index = request.args.get('index')
+    index = index if index else 0
 
     data = request.json
     current_data = load_data(index)
