@@ -8,8 +8,8 @@ class Node:
     def __init__(self, ip):
         self.ip = ip
         self.id = hash_key(ip)
-        self.data = {}  # Almacena las URLs
         self.successor = None  # Sucesor en el anillo
+        self.pos_successor = None  # Sucesor en el anillo
 
     def __repr__(self):
         return f"Node(IP={self.ip}, ID={self.id})"
@@ -28,18 +28,20 @@ def is_responsible(key_id, node):
         return (node.id < key_id < 2**bits) or (0 < key_id < node.successor.id)
 
 # Nombre del archivo CSV
-CSV_FILE = 'data_storage.csv'
+CSV_FILE = '-data_storage.csv'
 
-def load_data():
+def load_data(index):
     """Carga los datos desde el archivo CSV."""
+    CSV_FILE = index + CSV_FILE
     if not os.path.exists(CSV_FILE):
         return {}
     with open(CSV_FILE, mode='r') as file:
         reader = csv.reader(file)
         return {rows[0]: rows[1] for rows in reader}
 
-def save_data(data):
+def save_data(index, data):
     """Guarda los datos en el archivo CSV."""
+    CSV_FILE = index + CSV_FILE
     with open(CSV_FILE, mode='w', newline='') as file:
         writer = csv.writer(file)
         for url, url_id in data.items():

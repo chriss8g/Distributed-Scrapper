@@ -11,7 +11,8 @@ current_node = None
 def data():
     """Muestra la data almacenada"""
     global current_node
-    data = load_data()
+    index = request.args.get('index')
+    data = load_data(index)
     return jsonify({"message": ', '.join(data.keys())}), 200
 
 @app.route('/join', methods=['POST'])
@@ -24,20 +25,29 @@ def join():
     new_node = Node(new_node_ip)
 
     if not current_node.successor:
-        requests.post(f"http://{new_node_ip}/set_successor", json={'ip': current_node.ip})
+        requests.post(f"http://{new_node_ip}/set_successors", json={'ip': current_node.ip, 'ip2': new_node_ip})
         new_node.successor = current_node
+        new_node.pos_successor = new_node
+
         current_node.successor = new_node
+        current_node.pos_successor = current_node
+
         # Transferir las claves que ahora le corresponden al nuevo nodo
         transfer_keys(new_node)
         return jsonify({"message": "Nodo unido al anillo"}), 200
 
     successor_ip = current_node.successor.ip
+    pos_successor_ip = current_node.pos_successor.ip
     
-    # Actualizar el sucesor del nuevo nodo
+    # Actualizar sucesores del nuevo nodo
     if is_responsible(new_node_id, current_node):
-        requests.post(f"http://{new_node_ip}/set_successor", json={'ip': successor_ip})
+        requests.post(f"http://{new_node_ip}/set_successors", json={'ip': successor_ip, 'ip2': pos_successor_ip})
         new_node.successor = current_node.successor
+        new_node.pos_successorsuccessor = current_node.pos_successor
+
         current_node.successor = new_node
+        current_node.pos_successor = new_node.successor
+
         # Transferir las claves que ahora le corresponden al nuevo nodo
         transfer_keys(new_node)
         return jsonify({"message": "Nodo unido al anillo"}), 200
@@ -45,31 +55,46 @@ def join():
         response = requests.post(f"http://{successor_ip}/join", json={'ip': new_node_ip})
         return response.json(), 200
 
-@app.route('/set_successor', methods=['POST'])
-def set_successor():
+@app.route('/set_successors', methods=['POST'])
+def set_successors():
     """Establece el sucesor del nodo."""
     global current_node
     data = request.json
     successor_ip = data['ip']
+    pos_successor_ip = data['ip2']
+
     current_node.successor = Node(successor_ip)
+    current_node.pos_successor = Node(pos_successor_ip)
+
     return jsonify({"message": "Sucesor actualizado"}), 200
 
 @app.route('/store', methods=['POST'])
 def store():
     """Almacena una URL en el nodo responsable."""
     global current_node
+    index = request.args.get('index')
     data = request.json
     url = data['url']
     url_id = hash_key(url)
 
     if is_responsible(url_id, current_node):
-        data = load_data()
+
+        data = load_data(index)
         data[url] = url_id
-        save_data(data)
-        return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
+        save_data(index, data)
+
+        if index == 0:
+            response = requests.post(f"http://{current_node.successor.ip}/store?index=1", json={'url': url})
+            response = requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
+            return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
+        else if index == 1:
+            response = requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
+            return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
+        else if index == 2:
+            return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
     else:
         # Reenviar la solicitud al sucesor
-        response = requests.post(f"http://{current_node.successor.ip}/store", json={'url': url})
+        response = requests.post(f"http://{current_node.successor.ip}/store?index=0", json={'url': url})
         return response.json(), 200
 
 @app.route('/get', methods=['GET'])
@@ -80,7 +105,7 @@ def get():
     url_id = hash_key(url)
 
     if is_responsible(url_id, current_node):
-        data = load_data()
+        data = load_data(0)
         if url in data:
             return jsonify({"message": f"URL '{url}' encontrada en {current_node.ip}"}), 200
         else:
@@ -94,24 +119,36 @@ def get():
 def receive_keys():
     """Recibe las claves transferidas desde otro nodo."""
     global current_node
+    index = request.args.get('index')
+
     data = request.json
-    current_data = load_data()
+    current_data = load_data(index)
     current_data.update(data)
-    save_data(current_data)
+    save_data(index, current_data)
     return jsonify({"message": "Claves recibidas correctamente"}), 200
 
 def transfer_keys(new_node):
     """Transfiere las claves que ahora corresponden al nuevo nodo."""
     global current_node
-    current_data = load_data()
+    current_data = load_data(0)
+    copy_data = load_data(1)
     keys_to_transfer = {}
     for url, url_id in list(current_data.items()):
         if is_responsible(url_id, new_node):
             keys_to_transfer[url] = url_id
             del current_data[url]
-    if keys_to_transfer:
-        requests.post(f"http://{new_node.ip}/receive_keys", json=keys_to_transfer)
-        save_data(current_data)
+
+    save_data(0, current_data)
+
+    requests.post(f"http://{new_node.ip}/receive_keys?index=0", json=keys_to_transfer)
+    requests.post(f"http://{new_node.ip}/receive_keys?index=1", json=current_data)
+    requests.post(f"http://{new_node.ip}/receive_keys?index=2", json=copy_data)
+
+    requests.post(f"http://{new_node.successor.ip}/receive_keys?index=1", json=keys_to_transfer)
+    requests.post(f"http://{new_node.successor.ip}/receive_keys?index=2", json=current_data)
+
+    requests.post(f"http://{new_node.pos_successor.ip}/receive_keys?index=2", json=keys_to_transfer)
+    
 
 
 if __name__ == '__main__':
