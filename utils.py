@@ -1,4 +1,6 @@
 import hashlib
+import os
+import csv
 
 bits = 12
 

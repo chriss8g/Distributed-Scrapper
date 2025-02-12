@@ -1,7 +1,5 @@
 from flask import Flask, request, jsonify
 import requests
-import csv
-import os
 from utils import hash_key, Node, is_responsible, load_data, save_data
 
 app = Flask(__name__)
