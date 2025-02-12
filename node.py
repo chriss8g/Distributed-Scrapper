@@ -87,10 +87,10 @@ def store():
             response = requests.post(f"http://{current_node.successor.ip}/store?index=1", json={'url': url})
             response = requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
-        else if index == 1:
+        elif index == 1:
             response = requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
-        else if index == 2:
+        elif index == 2:
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
     else:
         # Reenviar la solicitud al sucesor
