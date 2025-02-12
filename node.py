@@ -84,7 +84,8 @@ def store():
         data = load_data(index)
         data[url] = url_id
         save_data(index, data)
-        
+        print(index)
+        print(index == 0)
         if index == 0:
             requests.post(f"http://{current_node.successor.ip}/store?index=1", json={'url': url})
             requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
