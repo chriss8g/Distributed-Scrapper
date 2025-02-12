@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 import requests
-from utils import hash_key, Node, is_responsible
+from utils import hash_key, Node, is_responsible, transfer_keys
 
 app = Flask(__name__)
 
@@ -13,7 +13,6 @@ def data():
     global current_node
     return jsonify({"message": ', '.join(i for i in current_node.data.keys())}), 200
 
-
 @app.route('/join', methods=['POST'])
 def join():
     """Un nuevo nodo se une al anillo."""
@@ -21,10 +20,14 @@ def join():
     data = request.json
     new_node_ip = data['ip']
     new_node_id = hash_key(new_node_ip)
+    new_node = Node(new_node_ip)
 
     if not current_node.successor:
         requests.post(f"http://{new_node_ip}/set_successor", json={'ip': current_node.ip})
-        current_node.successor = Node(new_node_ip)
+        new_node.successor = current_node
+        current_node.successor = new_node
+        # Transferir las claves que ahora le corresponden al nuevo nodo
+        transfer_keys(new_node)
         return jsonify({"message": "Nodo unido al anillo"}), 200
 
     successor_ip = current_node.successor.ip
@@ -32,7 +35,10 @@ def join():
     # Actualizar el sucesor del nuevo nodo
     if is_responsible(new_node_id, current_node):
         requests.post(f"http://{new_node_ip}/set_successor", json={'ip': successor_ip})
-        current_node.successor = Node(new_node_ip)
+        new_node.successor = current_node.successor
+        current_node.successor = new_node
+        # Transferir las claves que ahora le corresponden al nuevo nodo
+        transfer_keys(new_node)
         return jsonify({"message": "Nodo unido al anillo"}), 200
     else:
         response = requests.post(f"http://{successor_ip}/join", json={'ip': new_node_ip})
@@ -79,6 +85,15 @@ def get():
         # Reenviar la solicitud al sucesor
         response = requests.get(f"http://{current_node.successor.ip}/get", params={'url': url})
         return response.json(), 200
+
+@app.route('/receive_keys', methods=['POST'])
+def receive_keys():
+    """Recibe las claves transferidas desde otro nodo."""
+    global current_node
+    data = request.json
+    for url, url_id in data.items():
+        current_node.data[url] = url_id
+    return jsonify({"message": "Claves recibidas correctamente"}), 200
 
 if __name__ == '__main__':
     import sys
