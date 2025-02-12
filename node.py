@@ -43,7 +43,7 @@ def join():
     if is_responsible(new_node_id, current_node):
         requests.post(f"http://{new_node_ip}/set_successors", json={'ip': successor_ip, 'ip2': pos_successor_ip})
         new_node.successor = current_node.successor
-        new_node.pos_successorsuccessor = current_node.pos_successor
+        new_node.pos_successor = current_node.pos_successor
 
         current_node.successor = new_node
         current_node.pos_successor = new_node.successor
