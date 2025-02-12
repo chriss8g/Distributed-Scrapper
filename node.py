@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify
 import requests
-from utils import hash_key, Node, is_responsible
+import csv
+import os
+from utils import hash_key, Node, is_responsible, load_data, save_data
 
 app = Flask(__name__)
 
@@ -11,7 +13,8 @@ current_node = None
 def data():
     """Muestra la data almacenada"""
     global current_node
-    return jsonify({"message": ', '.join(i for i in current_node.data.keys())}), 200
+    data = load_data()
+    return jsonify({"message": ', '.join(data.keys())}), 200
 
 @app.route('/join', methods=['POST'])
 def join():
@@ -62,7 +65,9 @@ def store():
     url_id = hash_key(url)
 
     if is_responsible(url_id, current_node):
-        current_node.data[url] = url_id
+        data = load_data()
+        data[url] = url_id
+        save_data(data)
         return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
     else:
         # Reenviar la solicitud al sucesor
@@ -77,7 +82,8 @@ def get():
     url_id = hash_key(url)
 
     if is_responsible(url_id, current_node):
-        if url in current_node.data:
+        data = load_data()
+        if url in data:
             return jsonify({"message": f"URL '{url}' encontrada en {current_node.ip}"}), 200
         else:
             return jsonify({"message": f"La URL '{url}' no ha sido almacenada"}), 404
@@ -91,20 +97,23 @@ def receive_keys():
     """Recibe las claves transferidas desde otro nodo."""
     global current_node
     data = request.json
-    for url, url_id in data.items():
-        current_node.data[url] = url_id
+    current_data = load_data()
+    current_data.update(data)
+    save_data(current_data)
     return jsonify({"message": "Claves recibidas correctamente"}), 200
 
 def transfer_keys(new_node):
     """Transfiere las claves que ahora corresponden al nuevo nodo."""
     global current_node
+    current_data = load_data()
     keys_to_transfer = {}
-    for url, url_id in list(current_node.data.items()):
+    for url, url_id in list(current_data.items()):
         if is_responsible(url_id, new_node):
             keys_to_transfer[url] = url_id
-            del current_node.data[url]
+            del current_data[url]
     if keys_to_transfer:
         requests.post(f"http://{new_node.ip}/receive_keys", json=keys_to_transfer)
+        save_data(current_data)
 
 
 if __name__ == '__main__':
