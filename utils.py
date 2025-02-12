@@ -24,15 +24,3 @@ def is_responsible(key_id, node):
         return node.id < key_id < node.successor.id
     else:
         return (node.id < key_id < 2**bits) or (0 < key_id < node.successor.id)
-
-def transfer_keys(new_node):
-    """Transfiere las claves que ahora corresponden al nuevo nodo."""
-    global current_node
-    keys_to_transfer = {}
-    for url, url_id in list(current_node.data.items()):
-        if is_responsible(url_id, new_node):
-            keys_to_transfer[url] = url_id
-            del current_node.data[url]
-    if keys_to_transfer:
-        requests.post(f"http://{new_node.ip}/receive_keys", json=keys_to_transfer)
-

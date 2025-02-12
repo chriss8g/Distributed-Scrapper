@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 import requests
-from utils import hash_key, Node, is_responsible, transfer_keys
+from utils import hash_key, Node, is_responsible
 
 app = Flask(__name__)
 
@@ -94,6 +94,18 @@ def receive_keys():
     for url, url_id in data.items():
         current_node.data[url] = url_id
     return jsonify({"message": "Claves recibidas correctamente"}), 200
+
+def transfer_keys(new_node):
+    """Transfiere las claves que ahora corresponden al nuevo nodo."""
+    global current_node
+    keys_to_transfer = {}
+    for url, url_id in list(current_node.data.items()):
+        if is_responsible(url_id, new_node):
+            keys_to_transfer[url] = url_id
+            del current_node.data[url]
+    if keys_to_transfer:
+        requests.post(f"http://{new_node.ip}/receive_keys", json=keys_to_transfer)
+
 
 if __name__ == '__main__':
     import sys
