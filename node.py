@@ -1,23 +1,11 @@
 from flask import Flask, request, jsonify
 import requests
-from utils import hash_key
+from utils import hash_key, Node, is_responsible
 
 app = Flask(__name__)
 
 # Nodo actual
 current_node = None
-# Cantidad de bits en el anillo
-bits = 12
-
-class Node:
-    def __init__(self, ip):
-        self.ip = ip
-        self.id = hash_key(ip, bits)
-        self.data = {}  # Almacena las URLs
-        self.successor = None  # Sucesor en el anillo
-
-    def __repr__(self):
-        return f"Node(IP={self.ip}, ID={self.id})"
 
 @app.route('/data', methods=['GET'])
 def data():
@@ -32,7 +20,7 @@ def join():
     global current_node
     data = request.json
     new_node_ip = data['ip']
-    new_node_id = hash_key(new_node_ip, bits)
+    new_node_id = hash_key(new_node_ip)
 
     if not current_node.successor:
         requests.post(f"http://{new_node_ip}/set_successor", json={'ip': current_node.ip})
@@ -65,7 +53,7 @@ def store():
     global current_node
     data = request.json
     url = data['url']
-    url_id = hash_key(url, bits)
+    url_id = hash_key(url)
 
     if is_responsible(url_id, current_node):
         current_node.data[url] = url_id
@@ -80,7 +68,7 @@ def get():
     """Recupera una URL desde el nodo responsable."""
     global current_node
     url = request.args.get('url')
-    url_id = hash_key(url, bits)
+    url_id = hash_key(url)
 
     if is_responsible(url_id, current_node):
         if url in current_node.data:
@@ -91,14 +79,6 @@ def get():
         # Reenviar la solicitud al sucesor
         response = requests.get(f"http://{current_node.successor.ip}/get", params={'url': url})
         return response.json(), 200
-
-def is_responsible(key_id, node):
-    """Verifica si el nodo es responsable de un identificador."""
-    if node.id < node.successor.id:
-        return node.id < key_id < node.successor.id
-    else:
-        return (node.id < key_id < 2**bits) or (0 < key_id < node.successor.id)
-
 
 if __name__ == '__main__':
     import sys
