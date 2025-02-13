@@ -101,6 +101,31 @@ def store():
     else:
         return jsonify({"message": f"Indice distinto de 0, 1, 2"}), 300
         
+@app.route('/clear', methods=['POST'])
+def clear():
+    """Almacena una URL en el nodo responsable."""
+    global current_node
+    data = request.json
+    initial_node = data['initial_node'] if data else current_node.ip
+    slap = data['slap'] if data else 0
+
+    for index in [f'{0}', f'{1}', f'{2}']:
+        data = load_data(index)
+        data = {}
+        save_data(index, data)
+
+    if int(initial_node) == int(current_node.id):
+        if slap == 0:
+            slap = 1
+            requests.post(f"http://{current_node.successor.ip}/clear", json={'initial_node': initial_node, 'slap': slap})
+            return jsonify({"message": f"Almacenamientos de {current_node.ip} limpios"}), 200
+        else:
+            return jsonify({"message": f"Todos los almacenamientos limpios"}), 200
+    else:
+        requests.post(f"http://{current_node.successor.ip}/clear", json={'initial_node': initial_node, 'slap': slap})
+        return jsonify({"message": f"Almacenamientos de {current_node.ip} limpios"}), 200
+        
+
 
 @app.route('/get', methods=['GET'])
 def get():
