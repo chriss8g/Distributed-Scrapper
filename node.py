@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify
 import requests
 from utils import hash_key, Node, is_responsible, load_data, save_data
+import threading
+import time
 
 app = Flask(__name__)
 
@@ -50,7 +52,7 @@ def join():
 
 @app.route('/set_successors', methods=['POST'])
 def set_successors():
-    """Establece el sucesor del nodo."""
+    """Establece los sucesores del nodo."""
     global current_node
     data = request.json
     successor_ip = data['ip']
@@ -62,6 +64,20 @@ def set_successors():
     current_node.pos_pos_successor = Node(pos_pos_successor_ip)
 
     return jsonify({"message": "Sucesor actualizado"}), 200
+
+@app.route('/get_successors', methods=['GET'])
+def get_successors():
+    """Devuelve los sucesores del nodo."""
+    global current_node
+    successor_ip = current_node.successor.ip
+    pos_successor_ip = current_node.pos_successor.ip
+    pos_pos_successor_ip = current_node.pos_pos_successor.ip
+
+    return jsonify({
+        "ip": successor_ip,
+        "ip2": pos_successor_ip,
+        "ip3": pos_pos_successor_ip,
+                    }), 200
 
 @app.route('/store', methods=['POST'])
 def store():
@@ -138,6 +154,10 @@ def get():
         response = requests.get(f"http://{current_node.successor.ip}/get", params={'url': url})
         return response.json(), 200
 
+@app.route('/ping', methods=['GET'])
+def ping():
+    return jsonify({"message": f"Comunicación establecida"}), 200
+
 @app.route('/receive_keys', methods=['POST'])
 def receive_keys():
     """Recibe las claves transferidas desde otro nodo."""
@@ -175,6 +195,11 @@ def transfer_keys(new_node):
     
 
 
+def start_periodic_check(node):
+    while True:
+        node.check_connectivity()
+        time.sleep(5)
+
 if __name__ == '__main__':
     import sys
     if len(sys.argv) < 2:
@@ -183,4 +208,10 @@ if __name__ == '__main__':
 
     ip = sys.argv[1]
     current_node = Node(ip)
+
+    # Iniciar el hilo que verifica la conectividad cada 5 segundos
+    checker_thread = threading.Thread(target=start_periodic_check, args=(current_node,))
+    checker_thread.daemon = True  # El hilo se detendrá cuando el programa principal termine
+    checker_thread.start()
+
     app.run(host=ip.split(':')[0], port=int(ip.split(':')[1]))

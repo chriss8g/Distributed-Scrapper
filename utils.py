@@ -1,6 +1,7 @@
 import hashlib
 import os
 import csv
+import requests
 
 bits = 12
 
@@ -14,7 +15,72 @@ class Node:
 
     def __repr__(self):
         return f"Node(IP={self.ip}, ID={self.id})"
+    
+    def check_connectivity(self):
+        # Verifica la conectividad de los sucesores
+        successor_status = self._check_node_connectivity(self.successor)
+        pos_successor_status = self._check_node_connectivity(self.pos_successor)
+        pos_pos_successor_status = self._check_node_connectivity(self.pos_pos_successor)
 
+        # Determinar cuál caso es
+        if successor_status and pos_successor_status and pos_pos_successor_status:
+            # Caso 7: Nadie ha fallado
+            print("Caso 7: Nadie ha fallado")
+        elif not successor_status and pos_successor_status and pos_pos_successor_status:
+            # Caso 1: Solo el successor ha fallado
+            print("Caso 1: Solo el successor ha fallado")
+            self.successor = self.pos_successor
+            self.pos_successor = self.pos_pos_successor
+            response = requests.get(f"http://{self.pos_successor.ip}/get_succesors", timeout=2)
+            self.pos_pos_successor = Node(response["ip2"])
+        elif successor_status and not pos_successor_status and pos_pos_successor_status:
+            # Caso 2: Solo el pos_successor ha fallado
+            print("Caso 2: Solo el pos_successor ha fallado")
+            self.pos_successor = self.pos_pos_successor
+            response = requests.get(f"http://{self.successor.ip}/get_succesors", timeout=2)
+            self.pos_pos_successor = Node(response["ip3"])
+        elif successor_status and pos_successor_status and not pos_pos_successor_status:
+            # Caso 3: Solo el pos_pos_successor ha fallado
+            print("Caso 3: Solo el pos_pos_successor ha fallado")
+            response = requests.get(f"http://{self.successor.ip}/get_succesors", timeout=2)
+            self.pos_pos_successor = Node(response["ip3"])
+        elif not successor_status and not pos_successor_status and pos_pos_successor_status:
+            # Caso 4: Solo el successor no ha fallado (pero el pos_successor y el pos_pos_successor sí)
+            print("Caso 4: Solo el pos_pos_successor no ha fallado")
+            self.successor = self.pos_pos_successor
+            response = requests.get(f"http://{self.pos_pos_successor.ip}/get_succesors", timeout=2)
+            self.pos_successor = Node(response["ip"])
+            self.pos_pos_successor = Node(response["ip2"])
+        elif not successor_status and pos_successor_status and not pos_pos_successor_status:
+            # Caso 5: Solo el pos_successor no ha fallado (pero el successor y el pos_pos_successor sí)
+            print("Caso 5: Solo el pos_successor no ha fallado")
+            self.successor = self.pos_successor
+            response = requests.get(f"http://{self.pos_successor.ip}/get_succesors", timeout=2)
+            self.pos_successor = Node(response["ip2"])
+            self.pos_pos_successor = Node(response["ip3"])
+        elif successor_status and not pos_successor_status and not pos_pos_successor_status:
+            # Caso 6: Solo el successor no ha fallado (pero el pos_successor y el pos_pos_successor sí)
+            print("Caso 6: Solo el successor no ha fallado")
+            response = requests.get(f"http://{self.successor.ip}/get_succesors", timeout=2)
+            self.pos_successor = Node(response["ip3"])
+            response = requests.get(f"http://{self.pos_successor.ip}/get_succesors", timeout=2)
+            self.pos_pos_successor = Node(response["ip"])
+        else:
+            # Caso adicional: Todos los nodos han fallado (aunque dijiste que solo pueden fallar dos a la vez)
+            print(100*"\nErdiablo: Mis 3 nodos han fallado")
+
+    def _check_node_connectivity(self, node):
+        # Verifica la conectividad de un nodo específico
+        if node == self:
+            return True  # El nodo actual siempre está conectado
+
+        try:
+            response = requests.get(f"http://{node.ip}/ping", timeout=2)
+            return response.status_code == 200
+        except requests.exceptions.RequestException:
+            return False
+
+   
 def hash_key(key): #160 bits?
     """Hashea una clave usando SHA-1 y devuelve un identificador de 'bits' bits."""
     hash_hex = hashlib.sha1(key.encode()).hexdigest()
