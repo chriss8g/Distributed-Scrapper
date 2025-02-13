@@ -25,7 +25,7 @@ def join():
     new_node_id = hash_key(new_node_ip)
     new_node = Node(new_node_ip)
 
-    if not current_node.successor:
+    if current_node.successor == current_node:
         requests.post(f"http://{new_node_ip}/set_successors", json={'ip': current_node.ip, 'ip2': new_node_ip})
         new_node.successor = current_node
         new_node.pos_successor = new_node
@@ -105,24 +105,25 @@ def store():
 def clear():
     """Almacena una URL en el nodo responsable."""
     global current_node
-    data = request.json
-    initial_node = data['initial_node'] if data else current_node.ip
-    slap = data['slap'] if data else 0
+    initial_node = request.args.get('initial_node')
+    initial_node = initial_node if initial_node else current_node.ip
+    slap = request.args.get('slap')
+    slap = slap if slap else 0
 
     for index in [f'{0}', f'{1}', f'{2}']:
         data = load_data(index)
         data = {}
         save_data(index, data)
 
-    if int(initial_node) == int(current_node.id):
+    if initial_node == current_node.ip:
         if slap == 0:
             slap = 1
-            requests.post(f"http://{current_node.successor.ip}/clear", json={'initial_node': initial_node, 'slap': slap})
+            requests.delete(f"http://{current_node.successor.ip}/clear?initial_node={initial_node}&slap={slap}")
             return jsonify({"message": f"Almacenamientos de {current_node.ip} limpios"}), 200
         else:
             return jsonify({"message": f"Todos los almacenamientos limpios"}), 200
     else:
-        requests.post(f"http://{current_node.successor.ip}/clear", json={'initial_node': initial_node, 'slap': slap})
+        requests.delete(f"http://{current_node.successor.ip}/clear?initial_node={initial_node}&slap={slap}")
         return jsonify({"message": f"Almacenamientos de {current_node.ip} limpios"}), 200
         
 

@@ -8,8 +8,8 @@ class Node:
     def __init__(self, ip):
         self.ip = ip
         self.id = hash_key(ip)
-        self.successor = None  # Sucesor en el anillo
-        self.pos_successor = None  # Sucesor en el anillo
+        self.successor = self  # Sucesor en el anillo
+        self.pos_successor = self  # Sucesor en el anillo
 
     def __repr__(self):
         return f"Node(IP={self.ip}, ID={self.id})"
