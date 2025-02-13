@@ -80,26 +80,28 @@ def store():
     url_id = hash_key(url)
 
     if is_responsible(url_id, current_node):
-
-        data = load_data(index)
-        data[url] = url_id
-        save_data(index, data)
         if index == f'{0}':
+
+            data = load_data(index)
+            data[url] = url_id
+            save_data(index, data)
+            
             requests.post(f"http://{current_node.successor.ip}/store?index=1", json={'url': url})
             requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
-        elif index == f'{1}':
+        else: 
+            return jsonify({"message": f"Comportamiento anomalo"}), 300
+    else:
+        if index == f'{1}':
             requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
         elif index == f'{2}':
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
+        else:
+            # Reenviar la solicitud al sucesor
+            requests.post(f"http://{current_node.successor.ip}/store?index=0", json={'url': url})
+            return jsonify({"message": "Claves almacenadas correctamente"}), 200
         
-        return jsonify({"message": f"Comportamiento anomalo"}), 300
-
-    else:
-        # Reenviar la solicitud al sucesor
-        requests.post(f"http://{current_node.successor.ip}/store?index=0", json={'url': url})
-        return jsonify({"message": "Claves almacenadas correctamente"}), 200
 
 @app.route('/get', methods=['GET'])
 def get():
