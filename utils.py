@@ -23,7 +23,7 @@ def hash_key(key): #160 bits?
 def is_responsible(key_id, node):
     """Verifica si el nodo es responsable de un identificador."""
     if node.id < node.successor.id:
-        return node.id < key_id < node.successor.id
+        return node.id < int(key_id) < node.successor.id
     else:
         return (node.id < key_id < 2**bits) or (0 < key_id < node.successor.id)
 
