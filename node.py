@@ -101,7 +101,7 @@ def store():
     else:
         return jsonify({"message": f"Indice distinto de 0, 1, 2"}), 300
         
-@app.route('/clear', methods=['POST'])
+@app.route('/clear', methods=['DELETE'])
 def clear():
     """Almacena una URL en el nodo responsable."""
     global current_node
