@@ -74,7 +74,7 @@ def store():
     """Almacena una URL en el nodo responsable."""
     global current_node
     index = request.args.get('index')
-    index = index if index else 0
+    index = index if index else '0'
     data = request.json
     url = data['url']
     url_id = hash_key(url)
@@ -88,7 +88,6 @@ def store():
     if index == f'{0}':
         if is_responsible(url_id, current_node):
             requests.post(f"http://{current_node.successor.ip}/store?index=1", json={'url': url})
-            requests.post(f"http://{current_node.successor.ip}/store?index=2", json={'url': url})
             return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
         else: 
             # Reenviar la solicitud al sucesor
