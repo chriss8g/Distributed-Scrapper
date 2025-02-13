@@ -9,7 +9,8 @@ class Node:
         self.ip = ip
         self.id = hash_key(ip)
         self.successor = self  # Sucesor en el anillo
-        self.pos_successor = self  # Sucesor en el anillo
+        self.pos_successor = self
+        self.pos_pos_successor = self
 
     def __repr__(self):
         return f"Node(IP={self.ip}, ID={self.id})"

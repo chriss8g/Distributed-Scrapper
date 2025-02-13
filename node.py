@@ -25,29 +25,21 @@ def join():
     new_node_id = hash_key(new_node_ip)
     new_node = Node(new_node_ip)
 
-    if current_node.successor == current_node:
-        requests.post(f"http://{new_node_ip}/set_successors", json={'ip': current_node.ip, 'ip2': new_node_ip})
-        new_node.successor = current_node
-        new_node.pos_successor = new_node
-
-        current_node.successor = new_node
-        current_node.pos_successor = current_node
-
-        # Transferir las claves que ahora le corresponden al nuevo nodo
-        transfer_keys(new_node)
-        return jsonify({"message": "Nodo unido al anillo"}), 200
-
+    # Estado actual, antes de la insercion
     successor_ip = current_node.successor.ip
     pos_successor_ip = current_node.pos_successor.ip
+    pos_pos_successor_ip = current_node.pos_pos_successor.ip
     
     # Actualizar sucesores del nuevo nodo
     if is_responsible(new_node_id, current_node):
-        requests.post(f"http://{new_node_ip}/set_successors", json={'ip': successor_ip, 'ip2': pos_successor_ip})
+        requests.post(f"http://{new_node_ip}/set_successors", json={'ip': successor_ip, 'ip2': pos_successor_ip, 'ip3': pos_pos_successor_ip})
         new_node.successor = current_node.successor
         new_node.pos_successor = current_node.pos_successor
+        new_node.pos_pos_successor = current_node.pos_pos_successor
 
         current_node.successor = new_node
         current_node.pos_successor = new_node.successor
+        current_node.pos_pos_successor = new_node.pos_successor
 
         # Transferir las claves que ahora le corresponden al nuevo nodo
         transfer_keys(new_node)
@@ -63,9 +55,11 @@ def set_successors():
     data = request.json
     successor_ip = data['ip']
     pos_successor_ip = data['ip2']
+    pos_pos_successor_ip = data['ip3']
 
     current_node.successor = Node(successor_ip)
     current_node.pos_successor = Node(pos_successor_ip)
+    current_node.pos_pos_successor = Node(pos_pos_successor_ip)
 
     return jsonify({"message": "Sucesor actualizado"}), 200
 
@@ -100,7 +94,7 @@ def store():
         return jsonify({"message": f"URL '{url}' almacenada en {current_node.ip}"}), 200
     else:
         return jsonify({"message": f"Indice distinto de 0, 1, 2"}), 300
-        
+    
 @app.route('/clear', methods=['DELETE'])
 def clear():
     """Almacena una URL en el nodo responsable."""
@@ -126,8 +120,6 @@ def clear():
         requests.delete(f"http://{current_node.successor.ip}/clear?initial_node={initial_node}&slap={slap}")
         return jsonify({"message": f"Almacenamientos de {current_node.ip} limpios"}), 200
         
-
-
 @app.route('/get', methods=['GET'])
 def get():
     """Recupera una URL desde el nodo responsable."""
