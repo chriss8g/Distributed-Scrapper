@@ -106,7 +106,7 @@ def is_responsible(key_id, node):
     if node.id < node.successor.id:
         return node.id < int(key_id) < node.successor.id
     else:
-        return (node.id < int(key_id) < 2**bits) or (0 < key_id < node.successor.id)
+        return (node.id < int(key_id) < 2**bits) or (0 < int(key_id) < node.successor.id)
 
 def load_data(index):
     """Carga los datos desde el archivo CSV."""
