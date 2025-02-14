@@ -40,6 +40,9 @@ class ChordNode:
         '''
             Chequea si un id pertenece al nodo con id=end
         '''
+        end = int(end)
+        id = int(id)
+        start = int(start)
         if start < end:
             return start < id <= end
         else:
@@ -49,7 +52,7 @@ class ChordNode:
         '''
             le asigna un responsable a un id
         '''
-        successor_id = requests.get(f'http://127.0.0.1:{self.successor}/id')
+        successor_id = requests.get(f'http://127.0.0.1:{self.successor}/id').text
         if self.in_interval(id, self.node_id, successor_id):
             return self.successor # Si esta en el rango de mi sucesor, el se lo queda
         else:
@@ -60,7 +63,7 @@ class ChordNode:
         # Inicializar el nodo actual como este nodo
         current_node = self.port
         # Mientras el ID no esté en el intervalo (current_node, current_node.successor]
-        successor_id = requests.get(f'http://127.0.0.1:{self.successor}/id')
+        successor_id = requests.get(f'http://127.0.0.1:{self.successor}/id').text
         while not self.in_interval(id, self.hash_key(current_node), successor_id):
             # Avanzar al nodo más cercano que precede a id
             current_node = current_node.closest_preceding_node(id)
@@ -88,7 +91,7 @@ class ChordNode:
         while True:
             self.stabilize()
             self.fix_fingers()
-            time.sleep(5)  # Cada 30 segundos
+            time.sleep(30)  # Cada 30 segundos
 
     def stabilize(self):
         '''
@@ -96,10 +99,10 @@ class ChordNode:
 
             Llama al metodo q actualiza el predecessor de mi sucesor q es mi nuevo sucesor
         '''
-        predecessor_port = requests.get(f'http://127.0.0.1:{self.successor}/predecessor')
-        successor_id = requests.get(f'http://127.0.0.1:{self.successor}/id')
+        predecessor_port = requests.get(f'http://127.0.0.1:{self.successor}/predecessor').text
+        successor_id = requests.get(f'http://127.0.0.1:{self.successor}/id').text
 
-        x = requests.get(f'http://127.0.0.1:{predecessor_port}/id')
+        x = requests.get(f'http://127.0.0.1:{predecessor_port}/id').text
         if x and self.in_interval(x, self.node_id, successor_id):
             self.successor = predecessor_port
             print(f'mi sucesor es {predecessor_port}')
@@ -110,9 +113,8 @@ class ChordNode:
         '''
             actualiza mi predecessor
         '''
-        predecessor_id = requests.get(f'http://127.0.0.1:{self.predecessor}/id')
-        node_id = requests.get(f'http://127.0.0.1:{node}/id')
-
+        predecessor_id = requests.get(f'http://127.0.0.1:{self.predecessor}/id').text
+        node_id = requests.get(f'http://127.0.0.1:{node}/id').text
         if not self.predecessor or self.in_interval(node_id, predecessor_id, self.node_id):
             self.predecessor = node
             print(f'mi predecessor es {node}')
@@ -153,7 +155,7 @@ class ChordNode:
 
         self.finger_table[0]['node'] = successor['port']
 
-        predecessor = requests.get(f'http://127.0.0.1:{self.finger_table[0]['node']}/predecessor')
+        predecessor = requests.get(f'http://127.0.0.1:{self.finger_table[0]['node']}/predecessor').text
         self.predecessor = predecessor
         self.finger_table[0]['node'].predecessor = self.port
         self.successor = self.finger_table[0]['node']
@@ -161,7 +163,7 @@ class ChordNode:
         for i in range(self.m-1):
             start = self.finger_table[i+1]['start']
 
-            node_id = requests.get(f'http://127.0.0.1:{self.finger_table[i]['node']}/id')
+            node_id = requests.get(f'http://127.0.0.1:{self.finger_table[i]['node']}/id').text
             if self.in_interval(start, self.node_id, node_id):
                 self.finger_table[i+1]['node'] = self.finger_table[i]['node']
             else:
@@ -179,8 +181,8 @@ class ChordNode:
 
     def update_finger_table(self, s, i):
         # Verificar si el nuevo nodo s debe ser incluido en la entrada i de la finger table
-        s_id = requests.get(f'http://127.0.0.1:{s}/id')
-        node_id = requests.get(f'http://127.0.0.1:{self.finger_table[i]['node']}/id')
+        s_id = requests.get(f'http://127.0.0.1:{s}/id').text
+        node_id = requests.get(f'http://127.0.0.1:{self.finger_table[i]['node']}/id').text
         if self.in_interval(s_id, self.node_id, node_id):
             # Actualizar la entrada de la finger table
             self.finger_table[i]['node'] = s
@@ -195,7 +197,7 @@ class ChordNode:
         if self.predecessor:
             keys = requests.get(f'http://127.0.0.1:{self.predecessor}/keys')
             for key in list(keys):
-                predecessor_id = requests.get(f'http://127.0.0.1:{self.predecessor}/id')
+                predecessor_id = requests.get(f'http://127.0.0.1:{self.predecessor}/id').text
                 if self.in_interval(key, predecessor_id, self.node_id):
                     self.keys[key] = keys.pop(key)
                     requests.delete(f'http://127.0.0.1:{self.predecessor}/keys?key={key}')
@@ -229,16 +231,16 @@ def join():
     node.join(existing_node)
     return jsonify({'status': 'success'})
 
-@app.route('/notify', methods=['POST']) #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+@app.route('/notify', methods=['POST'])
 def notify():
-    new_predecessor = int(request.json.get('port'))
+    new_predecessor = int(request.args.get('port'))
     node.notify(new_predecessor)
     return jsonify({'status': 'notified'})
 
 @app.route('/store', methods=['POST'])
 def store():
-    key = request.json.get('key')
-    value = request.json.get('value')
+    key = request.args.get('key')
+    value = request.args.get('value')
     hashed_key = node.hash_key(key)
     successor = node.find_successor(hashed_key)
 
@@ -265,15 +267,15 @@ def store():
 
 @app.route('/id', methods=['GET'])
 def id():
-    return node.node_id
+    return f'{node.node_id}'
 
 @app.route('/predecessor', methods=['GET'])
 def predecessor():
-    return node.predecessor
+    return f'{node.predecessor}'
 
 @app.route('/key', methods=['GET'])
 def key():
-    return node.key
+    return f'{node.key}'
 
 @app.route('/keys', methods=['DELETE'])
 def keys():
