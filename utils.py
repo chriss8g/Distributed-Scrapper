@@ -24,39 +24,45 @@ class Node:
 
         # Determinar cuál caso es
         if successor_status and pos_successor_status and pos_pos_successor_status:
-            # Caso 7: Nadie ha fallado
             print("Caso 7: Nadie ha fallado")
         elif not successor_status and pos_successor_status and pos_pos_successor_status:
-            # Caso 1: Solo el successor ha fallado
             print("Caso 1: Solo el successor ha fallado")
             self.successor = self.pos_successor
             self.pos_successor = self.pos_pos_successor
-            response = requests.get(f"http://{self.successor.ip}/get_successors", timeout=2)
-            self.pos_pos_successor = Node(response["ip2"])
-        elif successor_status and not pos_successor_status and pos_pos_successor_status:
-            # Caso 2: Solo el pos_successor ha fallado
-            print("Caso 2: Solo el pos_successor ha fallado")
-            self.pos_successor = self.pos_pos_successor
             response = requests.get(f"http://{self.pos_successor.ip}/get_successors", timeout=2)
-            self.pos_pos_successor = Node(response["ip"])
-        elif successor_status and pos_successor_status and not pos_pos_successor_status:
-            # Caso 3: Solo el pos_pos_successor ha fallado
-            print("Caso 3: Solo el pos_pos_successor ha fallado")
-            response = requests.get(f"http://{self.successor.ip}/get_successors", timeout=2)
-            updated = self._check_node_connectivity(response["ip2"])
+            updated = self._check_node_connectivity(response["ip"])
             if(updated):
                 self.pos_pos_successor = Node(response["ip"])
             else:
-                self.pos_pos_successor = Node(response["ip3"])
+                self.pos_pos_successor = Node(response["ip2"])            
+        elif successor_status and not pos_successor_status and pos_pos_successor_status:
+            print("Caso 2: Solo el pos_successor ha fallado")
+            self.pos_successor = self.pos_pos_successor
+            response = requests.get(f"http://{self.pos_successor.ip}/get_successors", timeout=2)
+            updated = self._check_node_connectivity(response["ip"])
+            if(updated):
+                self.pos_pos_successor = Node(response["ip"])
+            else:
+                self.pos_pos_successor = Node(response["ip2"]) 
+        elif successor_status and pos_successor_status and not pos_pos_successor_status:
+            print("Caso 3: Solo el pos_pos_successor ha fallado")
+            response = requests.get(f"http://{self.pos_successor.ip}/get_successors", timeout=2)
+            updated = self._check_node_connectivity(response["ip"])
+            if(updated):
+                self.pos_pos_successor = Node(response["ip"])
+            else:
+                updated = self._check_node_connectivity(response["ip2"])
+                if(updated):
+                    self.pos_pos_successor = Node(response["ip2"])
+                else:
+                    self.pos_pos_successor = Node(response["ip3"])
         elif not successor_status and not pos_successor_status and pos_pos_successor_status:
-            # Caso 4: Solo el successor no ha fallado (pero el pos_successor y el pos_pos_successor sí)
             print("Caso 4: Solo el pos_pos_successor no ha fallado")
             self.successor = self.pos_pos_successor
             response = requests.get(f"http://{self.successor.ip}/get_successors", timeout=2)
             self.pos_successor = Node(response["ip"])
             self.pos_pos_successor = Node(response["ip2"])
         elif not successor_status and pos_successor_status and not pos_pos_successor_status:
-            # Caso 5: Solo el pos_successor no ha fallado (pero el successor y el pos_pos_successor sí)
             print("Caso 5: Solo el pos_successor no ha fallado")
             self.successor = self.pos_successor
             response = requests.get(f"http://{self.successor.ip}/get_successors", timeout=2)
@@ -68,7 +74,6 @@ class Node:
                 self.pos_successor = Node(response["ip2"])
                 self.pos_pos_successor = Node(response["ip3"])
         elif successor_status and not pos_successor_status and not pos_pos_successor_status:
-            # Caso 6: Solo el successor no ha fallado (pero el pos_successor y el pos_pos_successor sí)
             print("Caso 6: Solo el successor no ha fallado")
             response = requests.get(f"http://{self.successor.ip}/get_successors", timeout=2)
             updated = self._check_node_connectivity(response["ip"])
@@ -80,7 +85,6 @@ class Node:
                 response = requests.get(f"http://{self.pos_successor.ip}/get_successors", timeout=2)
                 self.pos_pos_successor = Node(response["ip"])
         else:
-            # Caso adicional: Todos los nodos han fallado (aunque dijiste que solo pueden fallar dos a la vez)
             print(100*"\nErdiablo: Mis 3 nodos han fallado")
 
     def _check_node_connectivity(self, node_ip):
