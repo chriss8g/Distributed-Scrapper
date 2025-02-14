@@ -9,22 +9,82 @@ M = 160  # Número de bits para los identificadores
 BASE_URL = "http://127.0.0.1:{}"  # URL base para los nodos
 
 class ChordNode:
-    def __init__(self, port):
+    def __init__(self, port, should_stabilized=True):
         self.m = M
         self.port = port
         self.node_id = self.hash_key(str(port))
         self.finger_table = [{
             'start': (self.node_id + 2**i) % (2**self.m),
             'interval': (self.node_id + 2**i, self.node_id + 2**(i+1)),
-            'node': None
+            'node': self
         } for i in range(self.m)]
-        self.predecessor = None
-        self.successor = None
+        self.predecessor = self
+        self.successor = self
         self.successor_list = []  # Lista de r sucesores
         self.keys = {}
         self.stabilize_thread = threading.Thread(target=self.stabilize_loop)
         self.stabilize_thread.daemon = True
-        self.stabilize_thread.start()
+        if should_stabilized:
+            self.stabilize_thread.start()
+
+    def __str__(self):
+        return f'{self.port}'
+
+
+    def to_dict(self, it=3):
+        if it > 0:
+            return {
+                'm': self.m,
+                'port': self.port,
+                'node_id': self.node_id,
+                'finger_table': [{
+                        'start': self.finger_table[i]['start'],
+                        'interval': self.finger_table[i]['interval'],
+                        'node': self.finger_table[i]['node'].to_dict(0)
+                    } for i in range(self.m)],
+                'predecessor': self.predecessor.to_dict(it-1) if self.predecessor else None,
+                'successor': self.successor.to_dict(it-1) if self.successor else None,
+                'successor_list': [node.to_dict(it-1) for node in self.successor_list],
+                'keys': self.keys
+            }
+        else:
+            return {
+                'm': self.m,
+                'port': self.port,
+                'node_id': self.node_id,
+                'finger_table': [{
+                        'start': self.finger_table[i]['start'],
+                        'interval': self.finger_table[i]['interval'],
+                        'node': self.finger_table[i]['node'].node_id
+                    } for i in range(self.m)],
+                'predecessor': {"node_id": self.predecessor.node_id} if self.predecessor else None,
+                'successor': {"node_id": self.successor.node_id} if self.successor else None,
+                'successor_list': [{"node_id": node.node_id} for node in self.successor_list],
+                'keys': self.keys
+            }
+    
+    @staticmethod
+    def from_dict(data, it=3):
+        if it > 0:
+            node = ChordNode(data['port'], False)
+            node.m = data['m']
+            node.node_id = data['node_id']
+            node.finger_table = data['finger_table']
+            node.predecessor = ChordNode.from_dict(data['predecessor'], it-1) if data['predecessor'] else None
+            node.successor = ChordNode.from_dict(data['successor'], it-1) if data['successor'] else None
+            node.successor_list = [ChordNode.from_dict(node_data, it-1) for node_data in data['successor_list']]
+            node.keys = data['keys']
+            return node
+        else:
+            node = ChordNode(data['port'], False)
+            node.m = data['m']
+            node.node_id = data['node_id']
+            node.finger_table = data['finger_table']
+            node.predecessor.node_id = data['predecessor']["node_id"] if data['predecessor'] else None
+            node.successor.node_id = data['successor']["node_id"] if data['successor'] else None
+            node.successor_list = [None for node_data in data['successor_list']]
+            node.keys = data['keys']
+            return node
 
     def hash_key(self, key):
         '''
@@ -51,6 +111,16 @@ class ChordNode:
             n_prime = self.closest_preceding_node(id)# Busca el nodo mas cercano a la key  y por detras de esta, para potencialmente asignarle su sucesor
             return n_prime.find_successor(id)
 
+    def find_predecessor(self, id):
+        # Inicializar el nodo actual como este nodo
+        current_node = self
+        # Mientras el ID no esté en el intervalo (current_node, current_node.successor]
+        while not self.in_interval(id, current_node.node_id, current_node.successor.node_id):
+            # Avanzar al nodo más cercano que precede a id
+            current_node = current_node.closest_preceding_node(id)
+        # Devolver el nodo actual (predecesor de id)
+        return current_node
+
     def closest_preceding_node(self, id):
         '''
             Dada una key, busca el nodo en mi finger table q este mas cerca de la key, pero antes q esta
@@ -72,7 +142,7 @@ class ChordNode:
         while True:
             self.stabilize()
             self.fix_fingers()
-            time.sleep(30)  # Cada 30 segundos
+            time.sleep(5)  # Cada 30 segundos
 
     def stabilize(self):
         '''
@@ -83,6 +153,7 @@ class ChordNode:
         x = self.successor.predecessor
         if x and self.in_interval(x.node_id, self.node_id, self.successor.node_id):
             self.successor = x
+            print(f'mi sucesor es {x}')
         self.successor.notify(self)
 
     def notify(self, node):
@@ -91,10 +162,11 @@ class ChordNode:
         '''
         if not self.predecessor or self.in_interval(node.node_id, self.predecessor.node_id, self.node_id):
             self.predecessor = node
+            print(f'mi predecesor es {node}')
 
     def fix_fingers(self):
         '''
-            Itera por la tabla actualizando los responsables(fingers) de los inicions de intervalos
+            Itera por la tabla actualizando los responsables(fingers) de los inicios de intervalos
         '''
         for i in range(self.m):
             self.finger_table[i]['node'] = self.find_successor(self.finger_table[i]['start'])
@@ -105,6 +177,9 @@ class ChordNode:
 
 
     def join(self, existing_node):
+        '''
+            Une al nodo self al anillo donde ya estaba existing_node
+        '''
         if existing_node:
             self.init_finger_table(existing_node)
             self.update_others()
@@ -116,6 +191,11 @@ class ChordNode:
             self.successor = self
 
     def init_finger_table(self, n_prime):
+        '''
+            Inicializa la finger table, asi como los valores de predecessor y successor
+
+            n_prime solo se utiliza para tener un nodo con su finger table y poder hacer las busquedas
+        '''
         self.finger_table[0]['node'] = n_prime.find_successor(self.finger_table[0]['start'])
         self.predecessor = self.finger_table[0]['node'].predecessor
         self.finger_table[0]['node'].predecessor = self
@@ -130,16 +210,25 @@ class ChordNode:
 
     def update_others(self):
         for i in range(self.m):
-            predecessor = self.find_predecessor((self.node_id - 2**i) % (2**self.m))
+            # Calcular el ID del predecesor que podría necesitar actualizar su finger table
+            id = (self.node_id - 2**i) % (2**self.m)
+            predecessor = self.find_predecessor(id)
+            # Pedirle al predecesor que actualice su finger table
             predecessor.update_finger_table(self, i)
 
     def update_finger_table(self, s, i):
+        # Verificar si el nuevo nodo s debe ser incluido en la entrada i de la finger table
         if self.in_interval(s.node_id, self.node_id, self.finger_table[i]['node'].node_id):
+            # Actualizar la entrada de la finger table
             self.finger_table[i]['node'] = s
-            p = self.predecessor
-            p.update_finger_table(s, i)
+            # Pedirle al predecesor que también actualice su finger table
+            if self.predecessor and self.predecessor != s:
+                self.predecessor.update_finger_table(s, i)
 
     def transfer_keys(self):
+        '''
+            Asigname las llaves q m corresponden al unirme al anillo
+        '''
         if self.predecessor:
             for key in list(self.predecessor.keys):
                 if self.in_interval(key, self.predecessor.node_id, self.node_id):
@@ -167,12 +256,15 @@ def find_successor():
 
 @app.route('/join', methods=['POST'])
 def join():
-    existing_port = int(request.json.get('existing_port'))
-    existing_node = get_node(existing_port)  # Función auxiliar para obtener nodos
+    existing_port = int(request.json.get('ip'))
+    if existing_port != node.port:
+        existing_node = get_node(existing_port)  # Función auxiliar para obtener nodos
+    else:
+        existing_node = None
     node.join(existing_node)
     return jsonify({'status': 'success'})
 
-@app.route('/notify', methods=['POST'])
+@app.route('/notify', methods=['POST']) #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
 def notify():
     new_predecessor = get_node(request.json.get('port'))
     node.notify(new_predecessor)
@@ -205,9 +297,17 @@ def retrieve():
         response = requests.get(f'http://127.0.0.1:{successor.port}/retrieve?key={key}')
         return response.json()
 
+@app.route('/me', methods=['GET'])
+def me():
+    return jsonify(node.to_dict())
+
 def get_node(port):
-    # Función auxiliar para obtener un nodo por su puerto
-    return ChordNode(port)
+    response = requests.get(f'http://127.0.0.1:{port}/me')
+    if response.status_code == 200:
+        data = response.json()
+        return ChordNode.from_dict(data)
+    else:
+        raise Exception(f"Error fetching node at port {port}")
 
 if __name__ == '__main__':
     import sys
