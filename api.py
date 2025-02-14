@@ -52,7 +52,7 @@ class ChordNode:
         '''
             le asigna un responsable a un id
         '''
-        successor_id = requests.get(f'http://127.0.0.1:{self.successor}/id').text
+        successor_id = self.hash_key(self.successor)
         if self.in_interval(id, self.node_id, successor_id):
             return self.successor # Si esta en el rango de mi sucesor, el se lo queda
         else:
@@ -63,7 +63,7 @@ class ChordNode:
         # Inicializar el nodo actual como este nodo
         current_node = self.port
         # Mientras el ID no esté en el intervalo (current_node, current_node.successor]
-        successor_id = requests.get(f'http://127.0.0.1:{self.successor}/id').text
+        successor_id = self.hash_key(self.successor)
         while not self.in_interval(id, self.hash_key(current_node), successor_id):
             # Avanzar al nodo más cercano que precede a id
             current_node = current_node.closest_preceding_node(id)
@@ -100,9 +100,9 @@ class ChordNode:
             Llama al metodo q actualiza el predecessor de mi sucesor q es mi nuevo sucesor
         '''
         predecessor_port = requests.get(f'http://127.0.0.1:{self.successor}/predecessor').text
-        successor_id = requests.get(f'http://127.0.0.1:{self.successor}/id').text
+        successor_id = self.hash_key(self.successor)
 
-        x = requests.get(f'http://127.0.0.1:{predecessor_port}/id').text
+        x = self.hash_key(predecessor_port)
         if x and self.in_interval(x, self.node_id, successor_id):
             self.successor = predecessor_port
             print(f'mi sucesor es {predecessor_port}')
@@ -113,8 +113,8 @@ class ChordNode:
         '''
             actualiza mi predecessor
         '''
-        predecessor_id = requests.get(f'http://127.0.0.1:{self.predecessor}/id').text
-        node_id = requests.get(f'http://127.0.0.1:{node}/id').text
+        predecessor_id = self.hash_key(self.predecessor)
+        node_id = self.hash_key(node)
         if not self.predecessor or self.in_interval(node_id, predecessor_id, self.node_id):
             self.predecessor = node
             print(f'mi predecessor es {node}')
@@ -163,7 +163,7 @@ class ChordNode:
         for i in range(self.m-1):
             start = self.finger_table[i+1]['start']
 
-            node_id = requests.get(f'http://127.0.0.1:{self.finger_table[i]['node']}/id').text
+            node_id = self.hash_key(self.finger_table[i]['node'])
             if self.in_interval(start, self.node_id, node_id):
                 self.finger_table[i+1]['node'] = self.finger_table[i]['node']
             else:
@@ -181,8 +181,8 @@ class ChordNode:
 
     def update_finger_table(self, s, i):
         # Verificar si el nuevo nodo s debe ser incluido en la entrada i de la finger table
-        s_id = requests.get(f'http://127.0.0.1:{s}/id').text
-        node_id = requests.get(f'http://127.0.0.1:{self.finger_table[i]['node']}/id').text
+        s_id = self.hash_key(s)
+        node_id = self.hash_key(self.finger_table[i]['node'])
         if self.in_interval(s_id, self.node_id, node_id):
             # Actualizar la entrada de la finger table
             self.finger_table[i]['node'] = s
@@ -197,7 +197,7 @@ class ChordNode:
         if self.predecessor:
             keys = requests.get(f'http://127.0.0.1:{self.predecessor}/keys')
             for key in list(keys):
-                predecessor_id = requests.get(f'http://127.0.0.1:{self.predecessor}/id').text
+                predecessor_id = self.hash_key(self.predecessor)
                 if self.in_interval(key, predecessor_id, self.node_id):
                     self.keys[key] = keys.pop(key)
                     requests.delete(f'http://127.0.0.1:{self.predecessor}/keys?key={key}')
@@ -264,10 +264,6 @@ def store():
 #     else:
 #         response = requests.get(f'http://127.0.0.1:{successor.port}/retrieve?key={key}')
 #         return response.json()
-
-@app.route('/id', methods=['GET'])
-def id():
-    return f'{node.node_id}'
 
 @app.route('/predecessor', methods=['GET'])
 def predecessor():
