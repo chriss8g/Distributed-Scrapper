@@ -5,7 +5,7 @@ import time
 import requests
 from requests.exceptions import ConnectionError, Timeout, RequestException
 
-def make_request(method, url, max_retries=5, retry_delay=2, **kwargs):
+def make_request(method, url, max_retries=4, retry_delay=2, **kwargs):
     """
     Realiza una solicitud HTTP con reintentos en caso de errores de conexión.
     
@@ -39,7 +39,7 @@ BASE_URL = "http://127.0.0.1:{}"  # URL base para los nodos
 TOLERANCIA = 2
 
 class ChordNode:
-    def __init__(self, port, should_stabilized=True):
+    def __init__(self, port):
         self.m = M
         self.port = port
         self.node_id = self.hash_key(str(port))
@@ -52,13 +52,17 @@ class ChordNode:
         self.successor = self.port
         self.successor_list = []  # Lista de r sucesores
         self.keys = {}
+
         self.stabilize_thread = threading.Thread(target=self.stabilize_loop)
         self.stabilize_thread.daemon = True
-        if should_stabilized:
-            self.stabilize_thread.start()
+        self.stabilize_thread.start()
 
-    # def __str__(self):
-    #     return f'{self.port}'
+        self.check_succ_thread = threading.Thread(target=self.check_succ_loop)
+        self.check_succ_thread.daemon = True
+        self.check_succ_thread.start()
+
+    def __str__(self):
+        return f'{self.port}'
 
     def hash_key(self, key):
         '''
@@ -124,9 +128,15 @@ class ChordNode:
         while True:
             self.stabilize()
             self.fix_fingers()
-            time.sleep(5)
+            time.sleep(3)
             print("Sucesor: ", self.successor)
             print("Antecesor: ", self.predecessor)
+
+    def check_succ_loop(self):
+        while True:
+            time.sleep(5)
+            self.successor = self.find_successor_with_replication(self.successor)
+
 
     def stabilize(self):
 
@@ -245,15 +255,33 @@ class ChordNode:
                         successor_port = self.successor_list[i]
                         make_request('post', f'http://127.0.0.1:{successor_port}/replicate', json={'key': key, 'value': self.keys[key]})
 
-    def find_successor_with_replication(self, id):
-        successor = self.find_successor(id)
-        if not make_request('get', f'http://127.0.0.1:{successor}/alive'):
-            # Intentar recuperar desde réplicas
-            for i in range(len(self.successor_list)):
-                replica_port = self.successor_list[i]
-                if make_request('get', f'http://127.0.0.1:{replica_port}/alive'):
-                    return replica_port
-        return successor
+    def find_successor_with_replication(self, successor):
+    
+        if self.is_node_alive(self.successor):
+            return self.successor
+
+        for i in range(len(self.successor_list)):
+            replica_port = self.successor_list[i]
+            if self.is_node_alive(replica_port):
+                return replica_port
+
+    def is_node_alive(self, node_port):
+        """
+        Verifica si un nodo está vivo haciendo una solicitud al endpoint /alive.
+        :param node_port: Puerto del nodo a verificar.
+        :return: True si el nodo responde, False en caso contrario.
+        """
+        try:
+            # Intentar hacer la solicitud al endpoint /alive
+            response = make_request('get', f'http://127.0.0.1:{node_port}/alive')
+            if response and response.status_code == 200:  # Verificar que la respuesta sea exitosa
+                return True
+        except (ConnectionError, Timeout, RequestException):
+            # Capturar errores de conexión, tiempo de espera u otros problemas
+            pass  # No hacer nada, simplemente continuar
+        
+        # Si llegamos aquí, el nodo no está disponible
+        return False
 
 # Inicialización del servidor Flask
 app = Flask(__name__)
