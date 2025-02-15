@@ -3,6 +3,34 @@ from flask import Flask, request, jsonify
 import threading
 import time
 import requests
+from requests.exceptions import ConnectionError, Timeout, RequestException
+
+def make_request(method, url, max_retries=3, retry_delay=1, **kwargs):
+    """
+    Realiza una solicitud HTTP con reintentos en caso de errores de conexión.
+    
+    :param method: Método HTTP (get, post, put, delete, etc.).
+    :param url: URL de la solicitud.
+    :param max_retries: Número máximo de reintentos.
+    :param retry_delay: Tiempo de espera (en segundos) entre reintentos.
+    :param kwargs: Argumentos adicionales para requests (params, json, headers, etc.).
+    :return: Respuesta de la solicitud o None si hay un error después de los reintentos.
+    """
+    for attempt in range(max_retries):
+        try:
+            response = requests.request(method, url, **kwargs)
+            response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+            return response
+        except (ConnectionError, Timeout) as e:
+            print(f"Intento {attempt + 1} de {max_retries}: Error de conexión o tiempo de espera en {url}. Reintentando en {retry_delay} segundos...")
+            time.sleep(retry_delay)
+        except RequestException as e:
+            print(f"Error en la solicitud a {url}: {e}")
+            break  # No reintentar para otros errores
+    print(f"Error: No se pudo completar la solicitud a {url} después de {max_retries} intentos.")
+    return None
+
+
 
 # Configuración global
 M = 160  # Número de bits para los identificadores
@@ -58,7 +86,7 @@ class ChordNode:
         else:
             n_prime = self.closest_preceding_node(id)# Busca el nodo mas cercano a la key  y por detras de esta, para potencialmente asignarle su sucesor
             
-            successor = requests.get(f'http://127.0.0.1:{n_prime}/find_successor?key={id}').json()['port']
+            successor = make_request('get', f'http://127.0.0.1:{n_prime}/find_successor?key={id}').json()['port']
             return successor
 
     def find_predecessor(self, id):
@@ -68,7 +96,7 @@ class ChordNode:
         successor_id = self.hash_key(str(self.successor))
         while not self.in_interval(id, self.hash_key(str(current_node)), successor_id):
             # Avanzar al nodo más cercano que precede a id
-            current_node = requests.get(f'http://127.0.0.1:{current_node}/closest_preceding_node?id={id}').text
+            current_node = make_request('get', f'http://127.0.0.1:{current_node}/closest_preceding_node?id={id}').text
         # Devolver el nodo actual (predecessor de id)
         return current_node
 
@@ -104,7 +132,7 @@ class ChordNode:
 
             Llama al metodo q actualiza el predecessor de mi sucesor q es mi nuevo sucesor
         '''
-        predecessor_port = requests.get(f'http://127.0.0.1:{self.successor}/predecessor').text
+        predecessor_port = make_request('get', f'http://127.0.0.1:{self.successor}/predecessor').text
         successor_id = self.hash_key(str(self.successor))
 
         x = self.hash_key(str(predecessor_port))
@@ -112,7 +140,7 @@ class ChordNode:
             self.successor = predecessor_port
             print(f'mi sucesor es {predecessor_port}')
         
-        requests.post(f'http://127.0.0.1:{self.successor}/notify?port={self.port}')
+        make_request('post', f'http://127.0.0.1:{self.successor}/notify?port={self.port}')
 
     def notify(self, node):
         '''
@@ -156,14 +184,14 @@ class ChordNode:
 
             n_prime(puerto) solo se utiliza para tener un nodo con su finger table y poder hacer las busquedas
         '''
-        successor = requests.get(f'http://127.0.0.1:{n_prime}/find_successor?key={self.finger_table[0]['start']}').json()
+        successor = make_request('get', f'http://127.0.0.1:{n_prime}/find_successor?key={self.finger_table[0]['start']}').json()
         self.finger_table[0]['node'] = successor['port']
 
-        predecessor = requests.get(f'http://127.0.0.1:{self.finger_table[0]['node']}/predecessor').text
+        predecessor = make_request('get', f'http://127.0.0.1:{self.finger_table[0]['node']}/predecessor').text
         self.predecessor = predecessor
 
 
-        requests.post(f'http://127.0.0.1:{self.finger_table[0]['node']}/set_predecessor?node_port={self.port}')
+        make_request('post', f'http://127.0.0.1:{self.finger_table[0]['node']}/set_predecessor?node_port={self.port}')
 
         self.successor = self.finger_table[0]['node']
         
@@ -174,7 +202,7 @@ class ChordNode:
             if self.in_interval(start, self.node_id, node_id):
                 self.finger_table[i+1]['node'] = self.finger_table[i]['node']
             else:
-                successor = requests.get(f'http://127.0.0.1:{n_prime}/find_successor?key={start}').json()
+                successor = make_request('get', f'http://127.0.0.1:{n_prime}/find_successor?key={start}').json()
                 self.finger_table[i+1]['node'] = successor['port']
 
     def update_others(self):
@@ -183,7 +211,7 @@ class ChordNode:
             id = (self.node_id - 2**i) % (2**self.m)
             predecessor = self.find_predecessor(id)
             # Pedirle al predecessor que actualice su finger table
-            requests.post(f'http://127.0.0.1:{predecessor}/update_finger_table?node_port={self.port}&index={i}')
+            make_request('post', f'http://127.0.0.1:{predecessor}/update_finger_table?node_port={self.port}&index={i}')
 
 
     def update_finger_table(self, s, i):
@@ -196,19 +224,19 @@ class ChordNode:
             self.finger_table[i]['node'] = s
             # Pedirle al predecessor que también actualice su finger table
             if self.predecessor and self.predecessor != s:
-                requests.get(f'http://127.0.0.1:{self.predecessor}/update_finger_table?node_port={s}&index={i}')
+                make_request('post', f'http://127.0.0.1:{self.predecessor}/update_finger_table?node_port={s}&index={i}')
 
     def transfer_keys(self):
         '''
             Asigname las llaves q m corresponden al unirme al anillo
         '''
         if self.predecessor:
-            keys = requests.get(f'http://127.0.0.1:{self.predecessor}/keys').json()
+            keys = make_request('get', f'http://127.0.0.1:{self.predecessor}/keys').json()
             for key in keys.keys():
                 predecessor_id = self.hash_key(str(self.predecessor))
                 if self.in_interval(key, predecessor_id, self.node_id):
                     self.keys[key] = keys.pop(key)
-                    requests.delete(f'http://127.0.0.1:{self.predecessor}/keys?key={key}')
+                    make_request('delete', f'http://127.0.0.1:{self.predecessor}/keys?key={key}')
 
 
 
@@ -256,7 +284,7 @@ def store():
         node.keys[hashed_key] = value
         return jsonify({'status': 'stored_locally'})
     else:
-        requests.post(f'http://127.0.0.1:{successor}/store', json={'key': key, 'value': value})
+        make_request('post', f'http://127.0.0.1:{successor}/store', json={'key': key, 'value': value})
         return jsonify({'status': 'forwarded'})
 
 # @app.route('/retrieve', methods=['GET'])
@@ -270,7 +298,7 @@ def store():
 #         else:
 #             return jsonify({'error': 'Key not found'}), 404
 #     else:
-#         response = requests.get(f'http://127.0.0.1:{successor.port}/retrieve?key={key}')
+#         response = make_request('get', f'http://127.0.0.1:{successor.port}/retrieve?key={key}')
 #         return response.json()
 
 @app.route('/set_predecessor', methods=['POST'])
