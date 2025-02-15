@@ -94,7 +94,9 @@ class ChordNode:
         while True:
             self.stabilize()
             self.fix_fingers()
-            time.sleep(30)  # Cada 30 segundos
+            time.sleep(5)  # Cada 30 segundos
+            print("Sucesor: ", self.successor)
+            print("Antecesor: ", self.predecessor)
 
     def stabilize(self):
         '''
@@ -181,11 +183,12 @@ class ChordNode:
             id = (self.node_id - 2**i) % (2**self.m)
             predecessor = self.find_predecessor(id)
             # Pedirle al predecessor que actualice su finger table
-            requests.get(f'http://127.0.0.1:{predecessor}/update_finger_table?node_port={self.port}&index={i}')
+            requests.post(f'http://127.0.0.1:{predecessor}/update_finger_table?node_port={self.port}&index={i}')
 
 
     def update_finger_table(self, s, i):
         # Verificar si el nuevo nodo s debe ser incluido en la entrada i de la finger table
+        i = int(i)
         s_id = self.hash_key(str(s))
         node_id = self.hash_key(str(self.finger_table[i]['node']))
         if self.in_interval(s_id, self.node_id, node_id):
@@ -200,8 +203,8 @@ class ChordNode:
             Asigname las llaves q m corresponden al unirme al anillo
         '''
         if self.predecessor:
-            keys = requests.get(f'http://127.0.0.1:{self.predecessor}/keys')
-            for key in list(keys):
+            keys = requests.get(f'http://127.0.0.1:{self.predecessor}/keys').json()
+            for key in keys.keys():
                 predecessor_id = self.hash_key(str(self.predecessor))
                 if self.in_interval(key, predecessor_id, self.node_id):
                     self.keys[key] = keys.pop(key)
@@ -285,7 +288,7 @@ def keys():
     return f'{node.keys}'
 
 @app.route('/keys', methods=['DELETE'])
-def keys():
+def delete_keys():
     key = request.args.get('key')
     self.keys.pop(key)
     return jsonify({'status': 'updated'})
