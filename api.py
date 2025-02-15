@@ -5,7 +5,7 @@ import time
 import requests
 from requests.exceptions import ConnectionError, Timeout, RequestException
 
-def make_request(method, url, max_retries=3, retry_delay=1, **kwargs):
+def make_request(method, url, max_retries=5, retry_delay=2, **kwargs):
     """
     Realiza una solicitud HTTP con reintentos en caso de errores de conexión.
     
@@ -22,8 +22,9 @@ def make_request(method, url, max_retries=3, retry_delay=1, **kwargs):
             response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
             return response
         except (ConnectionError, Timeout) as e:
-            print(f"Intento {attempt + 1} de {max_retries}: Error de conexión o tiempo de espera en {url}. Reintentando en {retry_delay} segundos...")
-            time.sleep(retry_delay)
+            print(f"Intento {attempt + 1} de {max_retries}: Error de conexión o tiempo de espera en {url}. Reintentando en {retry_delay**attempt} segundos...")
+            delay = retry_delay**attempt
+            time.sleep(delay)
         except RequestException as e:
             print(f"Error en la solicitud a {url}: {e}")
             break  # No reintentar para otros errores
@@ -35,6 +36,7 @@ def make_request(method, url, max_retries=3, retry_delay=1, **kwargs):
 # Configuración global
 M = 160  # Número de bits para los identificadores
 BASE_URL = "http://127.0.0.1:{}"  # URL base para los nodos
+TOLERANCIA = 2
 
 class ChordNode:
     def __init__(self, port, should_stabilized=True):
@@ -122,25 +124,30 @@ class ChordNode:
         while True:
             self.stabilize()
             self.fix_fingers()
-            time.sleep(5)  # Cada 30 segundos
+            time.sleep(5)
             print("Sucesor: ", self.successor)
             print("Antecesor: ", self.predecessor)
 
     def stabilize(self):
-        '''
-            Revisa si se agrego a alguien entre yo y mi sucesor, en tal caso actualiza la informacion de mi sucesor.
 
-            Llama al metodo q actualiza el predecessor de mi sucesor q es mi nuevo sucesor
-        '''
         predecessor_port = make_request('get', f'http://127.0.0.1:{self.successor}/predecessor').text
         successor_id = self.hash_key(str(self.successor))
 
         x = self.hash_key(str(predecessor_port))
         if x and self.in_interval(x, self.node_id, successor_id):
             self.successor = predecessor_port
-            print(f'mi sucesor es {predecessor_port}')
+            make_request('post', f'http://127.0.0.1:{self.successor}/notify?port={self.port}')
         
-        make_request('post', f'http://127.0.0.1:{self.successor}/notify?port={self.port}')
+        # Actualizar la lista de sucesores
+        self.update_successor_list()
+
+    def update_successor_list(self):
+        self.successor_list = []
+        current_successor = self.successor
+        for _ in range(TOLERANCIA):  # r es el número de sucesores a mantener
+            if current_successor:
+                self.successor_list.append(current_successor)
+                current_successor = make_request('get', f'http://127.0.0.1:{current_successor}/find_successor?key={current_successor}').json()['port']
 
     def notify(self, node):
         '''
@@ -150,7 +157,6 @@ class ChordNode:
         node_id = self.hash_key(str(node))
         if not self.predecessor or self.in_interval(node_id, predecessor_id, self.node_id):
             self.predecessor = node
-            print(f'mi predecessor es {node}')
 
     def fix_fingers(self):
         '''
@@ -227,9 +233,6 @@ class ChordNode:
                 make_request('post', f'http://127.0.0.1:{self.predecessor}/update_finger_table?node_port={s}&index={i}')
 
     def transfer_keys(self):
-        '''
-            Asigname las llaves q m corresponden al unirme al anillo
-        '''
         if self.predecessor:
             keys = make_request('get', f'http://127.0.0.1:{self.predecessor}/keys').json()
             for key in keys.keys():
@@ -237,11 +240,20 @@ class ChordNode:
                 if self.in_interval(key, predecessor_id, self.node_id):
                     self.keys[key] = keys.pop(key)
                     make_request('delete', f'http://127.0.0.1:{self.predecessor}/keys?key={key}')
+                    # Replicar la clave en los r sucesores
+                    for i in range(len(self.successor_list)):
+                        successor_port = self.successor_list[i]
+                        make_request('post', f'http://127.0.0.1:{successor_port}/replicate', json={'key': key, 'value': self.keys[key]})
 
-
-
-
-
+    def find_successor_with_replication(self, id):
+        successor = self.find_successor(id)
+        if not make_request('get', f'http://127.0.0.1:{successor}/alive'):
+            # Intentar recuperar desde réplicas
+            for i in range(len(self.successor_list)):
+                replica_port = self.successor_list[i]
+                if make_request('get', f'http://127.0.0.1:{replica_port}/alive'):
+                    return replica_port
+        return successor
 
 # Inicialización del servidor Flask
 app = Flask(__name__)
@@ -267,6 +279,13 @@ def join():
     node.join(existing_node)
     return jsonify({'status': 'success'})
 
+@app.route('/alive', methods=['GET'])
+def alive():
+    """
+    Endpoint para verificar si el nodo está activo.
+    """
+    return jsonify({'status': 'alive'})
+
 @app.route('/notify', methods=['POST'])
 def notify():
     new_predecessor = int(request.args.get('port'))
@@ -286,6 +305,13 @@ def store():
     else:
         make_request('post', f'http://127.0.0.1:{successor}/store', json={'key': key, 'value': value})
         return jsonify({'status': 'forwarded'})
+
+@app.route('/replicate', methods=['POST'])
+def replicate():
+    key = request.json.get('key')
+    value = request.json.get('value')
+    node.keys[key] = value
+    return jsonify({'status': 'replicated'})
 
 # @app.route('/retrieve', methods=['GET'])
 # def retrieve():
