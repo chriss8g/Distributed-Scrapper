@@ -5,34 +5,34 @@ import time
 import requests
 from requests.exceptions import ConnectionError, Timeout, RequestException
 
-def make_request(method, endpoint, port_ref, max_retries=4, retry_delay=2, **kwargs):
-    """
-    Realiza una solicitud HTTP con reintentos en caso de errores de conexión.
-    :param method: Método HTTP (get, post, put, delete, etc.).
-    :param endpoint: Endpoint de la solicitud (por ejemplo, '/predecessor').
-    :param port_ref: Referencia al puerto (lista de un solo elemento) para permitir actualizaciones dinámicas.
-    :param max_retries: Número máximo de reintentos.
-    :param retry_delay: Tiempo de espera (en segundos) entre reintentos.
-    :param kwargs: Argumentos adicionales para requests (params, json, headers, etc.).
-    :return: Respuesta de la solicitud o None si hay un error después de los reintentos.
-    """
-    for attempt in range(max_retries):
-        try:
-            # Construir la URL usando el puerto actual
-            url = f"http://127.0.0.1:{port_ref[0]}{endpoint}"
-            response = requests.request(method, url, **kwargs)
-            response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
-            return response
-        except (ConnectionError, Timeout) as e:
-            print(f"Intento {attempt + 1} de {max_retries}: Error de conexión o tiempo de espera en {url}. Reintentando en {retry_delay**attempt} segundos...")
-            delay = retry_delay**attempt
-            time.sleep(delay)
-        except RequestException as e:
-            print(f"Error en la solicitud a {url}: {e}")
-            break  # No reintentar para otros errores
+# def make_request(method, endpoint, port_ref, max_retries=4, retry_delay=2, **kwargs):
+#     """
+#     Realiza una solicitud HTTP con reintentos en caso de errores de conexión.
+#     :param method: Método HTTP (get, post, put, delete, etc.).
+#     :param endpoint: Endpoint de la solicitud (por ejemplo, '/predecessor').
+#     :param port_ref: Referencia al puerto (lista de un solo elemento) para permitir actualizaciones dinámicas.
+#     :param max_retries: Número máximo de reintentos.
+#     :param retry_delay: Tiempo de espera (en segundos) entre reintentos.
+#     :param kwargs: Argumentos adicionales para requests (params, json, headers, etc.).
+#     :return: Respuesta de la solicitud o None si hay un error después de los reintentos.
+#     """
+#     for attempt in range(max_retries):
+#         try:
+#             # Construir la URL usando el puerto actual
+#             url = f"http://127.0.0.1:{port_ref[0]}{endpoint}"
+#             response = requests.request(method, url, **kwargs)
+#             response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+#             return response
+#         except (ConnectionError, Timeout) as e:
+#             print(f"Intento {attempt + 1} de {max_retries}: Error de conexión o tiempo de espera en {url}. Reintentando en {retry_delay**attempt} segundos...")
+#             delay = retry_delay**attempt
+#             time.sleep(delay)
+#         except RequestException as e:
+#             print(f"Error en la solicitud a {url}: {e}")
+#             break  # No reintentar para otros errores
     
-    print(f"Error: No se pudo completar la solicitud a {url} después de {max_retries} intentos.")
-    return None
+#     print(f"Error: No se pudo completar la solicitud a {url} después de {max_retries} intentos.")
+#     return None
 
 
 
@@ -95,8 +95,25 @@ class ChordNode:
         else:
             n_prime = self.closest_preceding_node(id)# Busca el nodo mas cercano a la key  y por detras de esta, para potencialmente asignarle su sucesor
             
-            successor = make_request('get', f'/find_successor?key={id}', [n_prime]).json()['port']
-            return successor
+            # successor = make_request('get', f'/find_successor?key={id}', [n_prime]).json()['port']
+            for attempt in range(4):
+                try:
+                    # Construir la URL usando el puerto actual
+                    url = f"http://127.0.0.1:{n_prime}/find_successor?key={id}"
+                    response = requests.request('get', url)
+                    response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                    return response.json()['port']
+                except (ConnectionError, Timeout) as e:
+                    print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                    delay = 2**attempt
+                    time.sleep(delay)
+                except RequestException as e:
+                    print(f"Error en la solicitud a {url}: {e}")
+                    break  # No reintentar para otros errores
+            
+            print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+            return None
+
 
     def find_predecessor(self, id):
         # Inicializar el nodo actual como este nodo
@@ -105,8 +122,28 @@ class ChordNode:
         successor_id = self.hash_key(str(self.successor))
         while not self.in_interval(id, self.hash_key(str(current_node)), successor_id):
             # Avanzar al nodo más cercano que precede a id
-            current_node = make_request('get', f'/closest_preceding_node?id={id}', [current_node]).text
-        # Devolver el nodo actual (predecessor de id)
+            # current_node = make_request('get', f'/closest_preceding_node?id={id}', [current_node]).text
+            for attempt in range(4):
+                try:
+                    # Construir la URL usando el puerto actual
+                    url = f"http://127.0.0.1:{current_node}/closest_preceding_node?id={id}"
+                    response = requests.request('get', url)
+                    response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                    current_node = response.text
+                    break
+                except (ConnectionError, Timeout) as e:
+                    if (attempt == 3):
+                        print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                        return None
+                    print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                    delay = 2**attempt
+                    time.sleep(delay)
+                except RequestException as e:
+                    print(f"Error en la solicitud a {url}: {e}")
+                    break  # No reintentar para otros errores
+            
+            
+        # Devolver el nodo actual (predecessor de id) !!!!!!!!!!!!
         return current_node
 
     def closest_preceding_node(self, id):
@@ -139,18 +176,57 @@ class ChordNode:
         while True:
             time.sleep(1)
             self.successor = self.find_successor_with_replication(self.successor)
-            print(self.successor)
 
 
     def stabilize(self):
 
-        predecessor_port = make_request('get', f'/predecessor', [self.successor]).text
+        # predecessor_port = make_request('get', f'/predecessor', [self.successor]).text
+        for attempt in range(4):
+            try:
+                # Construir la URL usando el puerto actual
+                url = f"http://127.0.0.1:{self.successor}/predecessor"
+                response = requests.request('get', url)
+                response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                predecessor_port = response.text
+                break
+            except (ConnectionError, Timeout) as e:
+                if (attempt == 3):
+                    print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                    predecessor_port = None
+                    break
+                print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                delay = 2**attempt
+                time.sleep(delay)
+            except RequestException as e:
+                print(f"Error en la solicitud a {url}: {e}")
+                break  # No reintentar para otros errores
+        
+       
+
         successor_id = self.hash_key(str(self.successor))
 
         x = self.hash_key(str(predecessor_port))
         if x and self.in_interval(x, self.node_id, successor_id):
             self.successor = predecessor_port
-            make_request('post', f'/notify?port={self.port}', [self.successor])
+            # make_request('post', f'/notify?port={self.port}', [self.successor])
+            for attempt in range(4):
+                try:
+                    # Construir la URL usando el puerto actual
+                    url = f"http://127.0.0.1:{self.successor}/notify?port={self.port}"
+                    response = requests.request('post', url)
+                    response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                    break
+                except (ConnectionError, Timeout) as e:
+                    if (attempt == 3):
+                        print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                        break
+                    print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                    delay = 2**attempt
+                    time.sleep(delay)
+                except RequestException as e:
+                    print(f"Error en la solicitud a {url}: {e}")
+                    break  # No reintentar para otros errores
+            
         
         # Actualizar la lista de sucesores
         self.update_successor_list()
@@ -161,7 +237,27 @@ class ChordNode:
         for _ in range(TOLERANCIA):  # r es el número de sucesores a mantener
             if current_successor:
                 self.successor_list.append(current_successor)
-                current_successor = make_request('get', f'/find_successor?key={current_successor}', [current_successor]).json()['port']
+                # current_successor = make_request('get', f'/find_successor?key={current_successor}', [current_successor]).json()['port']
+                for attempt in range(4):
+                    try:
+                        # Construir la URL usando el puerto actual
+                        url = f"http://127.0.0.1:{current_successor}/find_successor?key={current_successor}"
+                        response = requests.request('get', url)
+                        response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                        current_successor = response.json()['port']
+                        break
+                    except (ConnectionError, Timeout) as e:
+                        if (attempt == 3):
+                            print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                            current_successor = None
+                            break
+                        print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                        delay = 2**attempt
+                        time.sleep(delay)
+                    except RequestException as e:
+                        print(f"Error en la solicitud a {url}: {e}")
+                        break  # No reintentar para otros errores
+                
 
     def notify(self, node):
         '''
@@ -204,14 +300,83 @@ class ChordNode:
 
             n_prime(puerto) solo se utiliza para tener un nodo con su finger table y poder hacer las busquedas
         '''
-        successor = make_request('get', f'/find_successor?key={self.finger_table[0]['start']}', [n_prime]).json()
+        # successor = make_request('get', f'/find_successor?key={self.finger_table[0]['start']}', [n_prime]).json()
+        for attempt in range(4):
+            try:
+                # Construir la URL usando el puerto actual
+                url = f"http://127.0.0.1:{n_prime}/find_successor?key={self.finger_table[0]['start']}"
+                response = requests.request('get', url)
+                response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                successor = response.json()
+                break
+            except (ConnectionError, Timeout) as e:
+                if (attempt == 3):
+                    print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                    successor = None
+                    break
+                print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                delay = 2**attempt
+                time.sleep(delay)
+            except RequestException as e:
+                print(f"Error en la solicitud a {url}: {e}")
+                break  # No reintentar para otros errores
+        
+        
+        
         self.finger_table[0]['node'] = successor['port']
 
-        predecessor = make_request('get', f'/predecessor', [self.finger_table[0]['node']]).text
+        # predecessor = make_request('get', f'/predecessor', [self.finger_table[0]['node']]).text
+        for attempt in range(4):
+            try:
+                # Construir la URL usando el puerto actual
+                url = f"http://127.0.0.1:{self.finger_table[0]['node']}/predecessor"
+                response = requests.request('get', url)
+                response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                predecessor = response.text
+                break
+            except (ConnectionError, Timeout) as e:
+                if (attempt == 3):
+                    print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                    predecessor = None
+                    break
+                print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                delay = 2**attempt
+                time.sleep(delay)
+            except RequestException as e:
+                print(f"Error en la solicitud a {url}: {e}")
+                break  # No reintentar para otros errores
+        
+        
+        
+        
+        
         self.predecessor = predecessor
 
 
-        make_request('post', f'/set_predecessor?node_port={self.port}', [self.finger_table[0]['node']])
+        # make_request('post', f'/set_predecessor?node_port={self.port}', [self.finger_table[0]['node']])
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!1
+        for attempt in range(4):
+            try:
+                # Construir la URL usando el puerto actual
+                url = f"http://127.0.0.1:{self.finger_table[0]['node']}/set_predecessor?node_port={self.port}"
+                response = requests.request('post', url)
+                response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                break
+            except (ConnectionError, Timeout) as e:
+                if (attempt == 3):
+                    print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                    break
+                print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                delay = 2**attempt
+                time.sleep(delay)
+            except RequestException as e:
+                print(f"Error en la solicitud a {url}: {e}")
+                break  # No reintentar para otros errores
+        
+        
+
+
+
 
         self.successor = self.finger_table[0]['node']
         
@@ -222,7 +387,31 @@ class ChordNode:
             if self.in_interval(start, self.node_id, node_id):
                 self.finger_table[i+1]['node'] = self.finger_table[i]['node']
             else:
-                successor = make_request('get', f'/find_successor?key={start}', [n_prime]).json()
+                # successor = make_request('get', f'/find_successor?key={start}', [n_prime]).json()
+                for attempt in range(4):
+                    try:
+                        # Construir la URL usando el puerto actual
+                        url = f"http://127.0.0.1:{n_prime}/find_successor?key={start}"
+                        response = requests.request('get', url)
+                        response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                        successor = response.json()
+                        break
+                    except (ConnectionError, Timeout) as e:
+                        if (attempt == 3):
+                            print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                            successor = None
+                            break
+                        print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                        delay = 2**attempt
+                        time.sleep(delay)
+                    except RequestException as e:
+                        print(f"Error en la solicitud a {url}: {e}")
+                        break  # No reintentar para otros errores
+                
+                
+                
+                
+                
                 self.finger_table[i+1]['node'] = successor['port']
 
     def update_others(self):
@@ -231,8 +420,26 @@ class ChordNode:
             id = (self.node_id - 2**i) % (2**self.m)
             predecessor = self.find_predecessor(id)
             # Pedirle al predecessor que actualice su finger table
-            make_request('post', f'/update_finger_table?node_port={self.port}&index={i}', [predecessor])
-
+            # make_request('post', f'/update_finger_table?node_port={self.port}&index={i}', [predecessor])
+            for attempt in range(4):
+                try:
+                    # Construir la URL usando el puerto actual
+                    url = f"http://127.0.0.1:{predecessor}/update_finger_table?node_port={self.port}&index={i}"
+                    response = requests.request('post', url)
+                    response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                    break
+                except (ConnectionError, Timeout) as e:
+                    if (attempt == 3):
+                        print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                        break
+                    print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                    delay = 2**attempt
+                    time.sleep(delay)
+                except RequestException as e:
+                    print(f"Error en la solicitud a {url}: {e}")
+                    break  # No reintentar para otros errores
+            
+            
 
     def update_finger_table(self, s, i):
         # Verificar si el nuevo nodo s debe ser incluido en la entrada i de la finger table
@@ -244,20 +451,115 @@ class ChordNode:
             self.finger_table[i]['node'] = s
             # Pedirle al predecessor que también actualice su finger table
             if self.predecessor and self.predecessor != s:
-                make_request('post', f'/update_finger_table?node_port={s}&index={i}', [self.predecessor])
+                # make_request('post', f'/update_finger_table?node_port={s}&index={i}', [self.predecessor])
+                for attempt in range(4):
+                    try:
+                        # Construir la URL usando el puerto actual
+                        url = f"http://127.0.0.1:{self.predecessor}/update_finger_table?node_port={s}&index={i}"
+                        response = requests.request('post', url)
+                        response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                        break
+                    except (ConnectionError, Timeout) as e:
+                        if (attempt == 3):
+                            print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                            break
+                        print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                        delay = 2**attempt
+                        time.sleep(delay)
+                    except RequestException as e:
+                        print(f"Error en la solicitud a {url}: {e}")
+                        break  # No reintentar para otros errores
+                
+                
+
 
     def transfer_keys(self):
         if self.predecessor:
-            keys = make_request('get', f'/keys', [self.predecessor]).json()
+            # keys = make_request('get', f'/keys', [self.predecessor]).json()
+            for attempt in range(4):
+                try:
+                    # Construir la URL usando el puerto actual
+                    url = f"http://127.0.0.1:{self.predecessor}/keys"
+                    response = requests.request('get', url)
+                    response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                    keys = response.json()
+                    break
+                except (ConnectionError, Timeout) as e:
+                    if (attempt == 3):
+                        print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                        keys = None
+                        break
+                    print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                    delay = 2**attempt
+                    time.sleep(delay)
+                except RequestException as e:
+                    print(f"Error en la solicitud a {url}: {e}")
+                    break  # No reintentar para otros errores
+            
+            
+
+
+
+
+
             for key in keys.keys():
                 predecessor_id = self.hash_key(str(self.predecessor))
                 if self.in_interval(key, predecessor_id, self.node_id):
                     self.keys[key] = keys.pop(key)
-                    make_request('delete', f'/keys?key={key}', [self.predecessor])
+                    # make_request('delete', f'/keys?key={key}', [self.predecessor])
+                    for attempt in range(4):
+                        try:
+                            # Construir la URL usando el puerto actual
+                            url = f"http://127.0.0.1:{self.predecessor}/keys?key={key}"
+                            response = requests.request('delete', url)
+                            response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                            break
+                        except (ConnectionError, Timeout) as e:
+                            if (attempt == 3):
+                                print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                                break
+                            print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                            delay = 2**attempt
+                            time.sleep(delay)
+                        except RequestException as e:
+                            print(f"Error en la solicitud a {url}: {e}")
+                            break  # No reintentar para otros errores
+                    
+                    
+
+
+
+
+
+
+
                     # Replicar la clave en los r sucesores
                     for i in range(len(self.successor_list)):
                         successor_port = self.successor_list[i]
-                        make_request('post', f'/replicate', [successor_port], json={'key': key, 'value': self.keys[key]})
+                        # make_request('post', f'/replicate', [successor_port], json={'key': key, 'value': self.keys[key]})
+                        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+                        for attempt in range(4):
+                            try:
+                                # Construir la URL usando el puerto actual
+                                url = f"http://127.0.0.1:{successor_port}/replicate"
+                                response = requests.request('post', url, json={'key': key, 'value': self.keys[key]})
+                                response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                                break
+                            except (ConnectionError, Timeout) as e:
+                                if (attempt == 3):
+                                    print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                                    break
+                                print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                                delay = 2**attempt
+                                time.sleep(delay)
+                            except RequestException as e:
+                                print(f"Error en la solicitud a {url}: {e}")
+                                break  # No reintentar para otros errores
+                        
+                        
+
+                        
+
 
     def find_successor_with_replication(self, successor):
     
@@ -335,8 +637,24 @@ def store():
         node.keys[hashed_key] = value
         return jsonify({'status': 'stored_locally'})
     else:
-        make_request('post', f'/store', [successor], json={'key': key, 'value': value})
-        return jsonify({'status': 'forwarded'})
+        # make_request('post', f'/store', [successor], json={'key': key, 'value': value})
+        for attempt in range(4):
+            try:
+                # Construir la URL usando el puerto actual
+                url = f"http://127.0.0.1:{successor}/store"
+                response = requests.request('post', url, json={'key': key, 'value': self.keys[key]})
+                response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                return jsonify({'status': 'forwarded'})
+            except (ConnectionError, Timeout) as e:
+                print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                delay = 2**attempt
+                time.sleep(delay)
+            except RequestException as e:
+                print(f"Error en la solicitud a {url}: {e}")
+                break  # No reintentar para otros errores
+        
+        print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+        return None
 
 @app.route('/replicate', methods=['POST'])
 def replicate():
