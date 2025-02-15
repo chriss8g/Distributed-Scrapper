@@ -5,12 +5,12 @@ import time
 import requests
 from requests.exceptions import ConnectionError, Timeout, RequestException
 
-def make_request(method, url, max_retries=4, retry_delay=2, **kwargs):
+def make_request(method, endpoint, port_ref, max_retries=4, retry_delay=2, **kwargs):
     """
     Realiza una solicitud HTTP con reintentos en caso de errores de conexión.
-    
     :param method: Método HTTP (get, post, put, delete, etc.).
-    :param url: URL de la solicitud.
+    :param endpoint: Endpoint de la solicitud (por ejemplo, '/predecessor').
+    :param port_ref: Referencia al puerto (lista de un solo elemento) para permitir actualizaciones dinámicas.
     :param max_retries: Número máximo de reintentos.
     :param retry_delay: Tiempo de espera (en segundos) entre reintentos.
     :param kwargs: Argumentos adicionales para requests (params, json, headers, etc.).
@@ -18,6 +18,8 @@ def make_request(method, url, max_retries=4, retry_delay=2, **kwargs):
     """
     for attempt in range(max_retries):
         try:
+            # Construir la URL usando el puerto actual
+            url = f"http://127.0.0.1:{port_ref[0]}{endpoint}"
             response = requests.request(method, url, **kwargs)
             response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
             return response
@@ -28,6 +30,7 @@ def make_request(method, url, max_retries=4, retry_delay=2, **kwargs):
         except RequestException as e:
             print(f"Error en la solicitud a {url}: {e}")
             break  # No reintentar para otros errores
+    
     print(f"Error: No se pudo completar la solicitud a {url} después de {max_retries} intentos.")
     return None
 
@@ -92,7 +95,7 @@ class ChordNode:
         else:
             n_prime = self.closest_preceding_node(id)# Busca el nodo mas cercano a la key  y por detras de esta, para potencialmente asignarle su sucesor
             
-            successor = make_request('get', f'http://127.0.0.1:{n_prime}/find_successor?key={id}').json()['port']
+            successor = make_request('get', f'/find_successor?key={id}', [n_prime]).json()['port']
             return successor
 
     def find_predecessor(self, id):
@@ -102,7 +105,7 @@ class ChordNode:
         successor_id = self.hash_key(str(self.successor))
         while not self.in_interval(id, self.hash_key(str(current_node)), successor_id):
             # Avanzar al nodo más cercano que precede a id
-            current_node = make_request('get', f'http://127.0.0.1:{current_node}/closest_preceding_node?id={id}').text
+            current_node = make_request('get', f'/closest_preceding_node?id={id}', [current_node]).text
         # Devolver el nodo actual (predecessor de id)
         return current_node
 
@@ -134,19 +137,20 @@ class ChordNode:
 
     def check_succ_loop(self):
         while True:
-            time.sleep(5)
+            time.sleep(1)
             self.successor = self.find_successor_with_replication(self.successor)
+            print(self.successor)
 
 
     def stabilize(self):
 
-        predecessor_port = make_request('get', f'http://127.0.0.1:{self.successor}/predecessor').text
+        predecessor_port = make_request('get', f'/predecessor', [self.successor]).text
         successor_id = self.hash_key(str(self.successor))
 
         x = self.hash_key(str(predecessor_port))
         if x and self.in_interval(x, self.node_id, successor_id):
             self.successor = predecessor_port
-            make_request('post', f'http://127.0.0.1:{self.successor}/notify?port={self.port}')
+            make_request('post', f'/notify?port={self.port}', [self.successor])
         
         # Actualizar la lista de sucesores
         self.update_successor_list()
@@ -157,7 +161,7 @@ class ChordNode:
         for _ in range(TOLERANCIA):  # r es el número de sucesores a mantener
             if current_successor:
                 self.successor_list.append(current_successor)
-                current_successor = make_request('get', f'http://127.0.0.1:{current_successor}/find_successor?key={current_successor}').json()['port']
+                current_successor = make_request('get', f'/find_successor?key={current_successor}', [current_successor]).json()['port']
 
     def notify(self, node):
         '''
@@ -200,14 +204,14 @@ class ChordNode:
 
             n_prime(puerto) solo se utiliza para tener un nodo con su finger table y poder hacer las busquedas
         '''
-        successor = make_request('get', f'http://127.0.0.1:{n_prime}/find_successor?key={self.finger_table[0]['start']}').json()
+        successor = make_request('get', f'/find_successor?key={self.finger_table[0]['start']}', [n_prime]).json()
         self.finger_table[0]['node'] = successor['port']
 
-        predecessor = make_request('get', f'http://127.0.0.1:{self.finger_table[0]['node']}/predecessor').text
+        predecessor = make_request('get', f'/predecessor', [self.finger_table[0]['node']]).text
         self.predecessor = predecessor
 
 
-        make_request('post', f'http://127.0.0.1:{self.finger_table[0]['node']}/set_predecessor?node_port={self.port}')
+        make_request('post', f'/set_predecessor?node_port={self.port}', [self.finger_table[0]['node']])
 
         self.successor = self.finger_table[0]['node']
         
@@ -218,7 +222,7 @@ class ChordNode:
             if self.in_interval(start, self.node_id, node_id):
                 self.finger_table[i+1]['node'] = self.finger_table[i]['node']
             else:
-                successor = make_request('get', f'http://127.0.0.1:{n_prime}/find_successor?key={start}').json()
+                successor = make_request('get', f'/find_successor?key={start}', [n_prime]).json()
                 self.finger_table[i+1]['node'] = successor['port']
 
     def update_others(self):
@@ -227,7 +231,7 @@ class ChordNode:
             id = (self.node_id - 2**i) % (2**self.m)
             predecessor = self.find_predecessor(id)
             # Pedirle al predecessor que actualice su finger table
-            make_request('post', f'http://127.0.0.1:{predecessor}/update_finger_table?node_port={self.port}&index={i}')
+            make_request('post', f'/update_finger_table?node_port={self.port}&index={i}', [predecessor])
 
 
     def update_finger_table(self, s, i):
@@ -240,20 +244,20 @@ class ChordNode:
             self.finger_table[i]['node'] = s
             # Pedirle al predecessor que también actualice su finger table
             if self.predecessor and self.predecessor != s:
-                make_request('post', f'http://127.0.0.1:{self.predecessor}/update_finger_table?node_port={s}&index={i}')
+                make_request('post', f'/update_finger_table?node_port={s}&index={i}', [self.predecessor])
 
     def transfer_keys(self):
         if self.predecessor:
-            keys = make_request('get', f'http://127.0.0.1:{self.predecessor}/keys').json()
+            keys = make_request('get', f'/keys', [self.predecessor]).json()
             for key in keys.keys():
                 predecessor_id = self.hash_key(str(self.predecessor))
                 if self.in_interval(key, predecessor_id, self.node_id):
                     self.keys[key] = keys.pop(key)
-                    make_request('delete', f'http://127.0.0.1:{self.predecessor}/keys?key={key}')
+                    make_request('delete', f'/keys?key={key}', [self.predecessor])
                     # Replicar la clave en los r sucesores
                     for i in range(len(self.successor_list)):
                         successor_port = self.successor_list[i]
-                        make_request('post', f'http://127.0.0.1:{successor_port}/replicate', json={'key': key, 'value': self.keys[key]})
+                        make_request('post', f'/replicate', [successor_port], json={'key': key, 'value': self.keys[key]})
 
     def find_successor_with_replication(self, successor):
     
@@ -273,7 +277,7 @@ class ChordNode:
         """
         try:
             # Intentar hacer la solicitud al endpoint /alive
-            response = make_request('get', f'http://127.0.0.1:{node_port}/alive')
+            response = requests.get(f'http://127.0.0.1:{node_port}/alive')
             if response and response.status_code == 200:  # Verificar que la respuesta sea exitosa
                 return True
         except (ConnectionError, Timeout, RequestException):
@@ -331,7 +335,7 @@ def store():
         node.keys[hashed_key] = value
         return jsonify({'status': 'stored_locally'})
     else:
-        make_request('post', f'http://127.0.0.1:{successor}/store', json={'key': key, 'value': value})
+        make_request('post', f'/store', [successor], json={'key': key, 'value': value})
         return jsonify({'status': 'forwarded'})
 
 @app.route('/replicate', methods=['POST'])
@@ -352,7 +356,7 @@ def replicate():
 #         else:
 #             return jsonify({'error': 'Key not found'}), 404
 #     else:
-#         response = make_request('get', f'http://127.0.0.1:{successor.port}/retrieve?key={key}')
+#         response = make_request('get', f'/retrieve?key={key}', [successor.port])
 #         return response.json()
 
 @app.route('/set_predecessor', methods=['POST'])
