@@ -4,7 +4,7 @@ from requests.exceptions import RequestException, ConnectionError, Timeout
 import socket
 import time
 
-M = 20  # Número de bits para los identificadores
+M = 160  # Número de bits para los identificadores
 
 def is_node_alive(node_port):
     """

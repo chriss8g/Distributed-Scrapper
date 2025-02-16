@@ -5,9 +5,11 @@ from requests.exceptions import RequestException
 from utils import retry_request, send_broadcast, hash_key, in_interval, is_node_alive
 import copy
 import ast
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
 
 # Configuración global
-M = 20  # Número de bits para los identificadores
+M = 160  # Número de bits para los identificadores
 BASE_URL = "http://127.0.0.1:{}"  # URL base para los nodos
 TOLERANCIA = 2
 
@@ -25,6 +27,7 @@ class ChordNode:
         self.successor = self.port
         self.successor_list = []  # Lista de r sucesores
         self.keys = [ {} for _ in range(TOLERANCIA+1) ]
+        self.tasks = []
 
         self.stabilize_thread = threading.Thread(target=self.stabilize_loop)
         self.stabilize_thread.daemon = True
@@ -34,8 +37,44 @@ class ChordNode:
         self.check_succ_thread.daemon = True
         self.check_succ_thread.start()
 
+        self.proccess_thread = threading.Thread(target=self.proccess_loop)
+        self.proccess_thread.daemon = True
+        self.proccess_thread.start()
+
     def __str__(self):
         return f'{self.port}'
+    
+
+    def proccess_loop(self):
+        while True:
+            if self.tasks:
+                url = self.tasks.pop()
+                
+                if url[1] > 0:
+                    def generate_url():
+                        return url[0]
+                    try:
+                        response = retry_request(requests.get, generate_url)
+                        self.keys[0][hash_key(url[0])] = response.text
+                        # Abrir el archivo en modo escritura ('w')
+                        with open(f"{self.port}/{url[0]}.html", "w") as archivo:
+                            archivo.write(response.text)
+
+                    except Exception as e:
+                        print(f"Error al scrapear {url[0]}: {e}")
+
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    links = [urljoin(url, a['href']) for a in soup.find_all('a', href=True)]
+                    
+                    for link in links:
+                        def generate_url():
+                            return f"http://127.0.0.1:{self.successor}/store?key={url}&deep={int(url[1])-1}"
+
+                        try:
+                            response = retry_request(requests.post, generate_url)
+                        except RequestException as e:
+                            print(f"Error al scrapear {link}: {e}")
+
 
     def find_successor(self, id):
         """
@@ -105,7 +144,6 @@ class ChordNode:
             self.stabilize()
             self.fix_fingers()
             time.sleep(5)
-            print(self.keys[0], self.keys[1], self.keys[2])
 
     def fix_for_failed(self, node_id):
         for data in self.keys[1:]:
@@ -392,7 +430,6 @@ class ChordNode:
                 
                 # actualiza el resto de mis informaciones replicadas
                 self.keys[1:] = copy.deepcopy(keys[1:])
-                print("mis llaves", self.keys)
                 update_info = copy.deepcopy([keys[0]] + self.keys[:-1])
                         
                 # Replicar la clave en los r sucesores
@@ -402,7 +439,6 @@ class ChordNode:
                 for it, successor_port in enumerate(self.successor_list):
                     for i, data in enumerate(update_info[:-(-(len(update_info))+it)]):
                         data = copy.deepcopy(data)
-                        print(update_info)
                         if successor_port != self.port:
                             def generate_replicate_url():
                                 return f"http://127.0.0.1:{successor_port}/keys?id={i+it}"

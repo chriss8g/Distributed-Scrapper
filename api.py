@@ -4,6 +4,8 @@ from requests.exceptions import RequestException
 from node import ChordNode
 from utils import listen_for_broadcast, hash_key, retry_request, in_interval
 
+DEEP = 1
+
 # Inicialización del servidor Flask
 app = Flask(__name__)
 node = None
@@ -50,7 +52,8 @@ def fix_for_failed():
 @app.route('/store', methods=['POST'])
 def store():
     key = request.args.get('key')
-    value = request.args.get('value')
+    deep = request.args.get('deep')
+    deep = deep if deep else DEEP
     hashed_key = hash_key(str(key))
     
     # Encontrar el nodo responsable usando la lógica Chord
@@ -60,7 +63,8 @@ def store():
     if in_interval(hashed_key, predecessor_id, current_node_id):
         # Almacenar localmente si somos responsables
         # print("epaaa")
-        node.keys[0][hashed_key] = value
+        # node.keys[0][hashed_key] = value
+        node.tasks.append((key, deep))
         return jsonify({'status': 'stored'})
     else:
         # Buscar el nodo más cercano en la finger table
@@ -69,11 +73,11 @@ def store():
         if closest_node == node.port:
             # Si el más cercano somos nosotros, usar nuestro sucesor
             def generate_forward_url():
-                return f"http://127.0.0.1:{node.successor}/store?key={key}&value={value}"
+                return f"http://127.0.0.1:{node.successor}/store?key={key}"
         else:
             # Reenviar al nodo más cercano encontrado
             def generate_forward_url():
-                return f"http://127.0.0.1:{closest_node}/store?key={key}&value={value}"
+                return f"http://127.0.0.1:{closest_node}/store?key={key}"
 
         try:
             response = retry_request(requests.post, generate_forward_url)
