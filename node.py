@@ -107,6 +107,15 @@ class ChordNode:
             time.sleep(5)
             print(self.keys[0], self.keys[1], self.keys[2])
 
+    def fix_for_failed(self, node_id):
+        for data in self.keys[1:]:
+            if data:
+                if in_interval(list(data.keys())[0], node_id, self.node_id):
+                    self.keys[0].update(copy.deepcopy(data))
+                else:
+                    break
+
+
     def check_succ_loop(self):
         """
         Verifica periódicamente el sucesor y actualiza el predecesor del sucesor si es necesario.
@@ -114,7 +123,19 @@ class ChordNode:
         while True:
             time.sleep(3)
             old_successor = self.successor
-            self.successor = self.find_successor_with_replication()
+            new_successor = self.find_successor_with_replication()
+
+            if new_successor != old_successor:
+                def generate_url():
+                    return f"http://127.0.0.1:{new_successor}/fix_for_failed?node_id={self.node_id}"
+
+                try:
+                    retry_request(requests.post, generate_url)
+                except RequestException as e:
+                    print(f"Error al notificar al sucesor {self.successor}: {e}")
+
+
+            self.successor = new_successor
             
             if old_successor != self.successor:
                 def generate_url():
@@ -169,11 +190,26 @@ class ChordNode:
         self.successor_list = []
         current_successor = self.successor
 
+        for i in range(TOLERANCIA):  # r es el número de sucesores a mantener
+            # Escribiendo mi informacion en la i-esima data de mi sucesor
+            if current_successor != self.port:
+                def generate_replicate_url():
+                    return f"http://127.0.0.1:{current_successor}/keys?id={i+1}"
+
+                try:
+                    retry_request(requests.put, generate_replicate_url, json={'data': self.keys[i]})
+                except RequestException as e:
+                    print(f"Error al transferir datos de orden {i+1} a {current_successor}: {e}")
+            else:
+                self.keys[i+1] = copy.deepcopy(self.keys[0])
+
         for i in range(TOLERANCIA + 1):  # r es el número de sucesores a mantener
             if current_successor:
                 print(f"Mi sucesor #{i} es", current_successor)
                 self.successor_list.append(current_successor)
 
+
+                # Busca el nuevo sucesor
                 if str(current_successor) != str(self.port):
                     def generate_successor_url():
                         return f"http://127.0.0.1:{current_successor}/find_successor?key={(int(hash_key(str(current_successor))) + 1) % (2 ** self.m)}"

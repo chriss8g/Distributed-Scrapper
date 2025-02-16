@@ -41,6 +41,12 @@ def notify():
     node.notify(new_predecessor)
     return jsonify({'status': 'notified'})
 
+@app.route('/fix_for_failed', methods=['POST'])
+def fix_for_failed():
+    node_id = int(request.args.get('node_id'))
+    node.fix_for_failed(node_id)
+    return jsonify({'status': 'updated'})
+
 @app.route('/store', methods=['POST'])
 def store():
     key = request.args.get('key')
@@ -55,19 +61,7 @@ def store():
         # Almacenar localmente si somos responsables
         # print("epaaa")
         node.keys[0][hashed_key] = value
-        
-        # Replicar en los sucesores
-        for i, successor_port in enumerate(node.successor_list[:-1]):
-            def generate_replicate_url():
-                return f"http://127.0.0.1:{successor_port}/replicate?id={i+1}"
-            
-            try:
-                retry_request(requests.post, generate_replicate_url, 
-                            json={'key': hashed_key, 'value': value})
-            except RequestException:
-                continue
-        
-        return jsonify({'status': 'stored_locally'})
+        return jsonify({'status': 'stored'})
     else:
         # Buscar el nodo más cercano en la finger table
         closest_node = node.closest_preceding_node(hashed_key)
