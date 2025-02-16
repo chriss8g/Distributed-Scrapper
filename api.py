@@ -4,6 +4,7 @@ import threading
 import time
 import requests
 from requests.exceptions import ConnectionError, Timeout, RequestException
+import socket
 
 # def make_request(method, endpoint, port_ref, max_retries=4, retry_delay=2, **kwargs):
 #     """
@@ -37,9 +38,9 @@ from requests.exceptions import ConnectionError, Timeout, RequestException
 
 
 # Configuración global
-M = 160  # Número de bits para los identificadores
+M = 8  # Número de bits para los identificadores
 BASE_URL = "http://127.0.0.1:{}"  # URL base para los nodos
-TOLERANCIA = 2
+TOLERANCIA = 3
 
 class ChordNode:
     def __init__(self, port):
@@ -99,10 +100,14 @@ class ChordNode:
             for attempt in range(4):
                 try:
                     # Construir la URL usando el puerto actual
-                    url = f"http://127.0.0.1:{n_prime}/find_successor?key={id}"
-                    response = requests.request('get', url)
-                    response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
-                    return response.json()['port']
+                    if str(self.port) == str(n_prime):
+                        response = self.find_predecessor(id)
+                    else:
+                        url = f"http://127.0.0.1:{n_prime}/find_successor?key={id}"
+                        response = requests.request('get', url)
+                        response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                        response = response.json()
+                    return response['port']
                 except (ConnectionError, Timeout) as e:
                     print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
                     delay = 2**attempt
@@ -126,10 +131,14 @@ class ChordNode:
             for attempt in range(4):
                 try:
                     # Construir la URL usando el puerto actual
-                    url = f"http://127.0.0.1:{current_node}/closest_preceding_node?id={id}"
-                    response = requests.request('get', url)
-                    response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
-                    current_node = response.text
+                    if str(self.port) == str(current_node):
+                        response = self.closest_preceding_node(id)
+                    else:
+                        url = f"http://127.0.0.1:{current_node}/closest_preceding_node?id={id}"
+                        response = requests.request('get', url)
+                        response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                        response = response.text
+                    current_node = response
                     break
                 except (ConnectionError, Timeout) as e:
                     if (attempt == 3):
@@ -168,14 +177,35 @@ class ChordNode:
         while True:
             self.stabilize()
             self.fix_fingers()
-            time.sleep(3)
+            time.sleep(5)
+            # with open("archivo.txt", "a") as archivo:
+            #     archivo.write("Este mensaje se añade al final.\n")
             print("Sucesor: ", self.successor)
             print("Antecesor: ", self.predecessor)
 
     def check_succ_loop(self):
         while True:
-            time.sleep(1)
+            time.sleep(3)
+            a = self.successor
             self.successor = self.find_successor_with_replication(self.successor)
+            if a != self.successor:
+                for attempt in range(4):
+                    try:
+                        # Construir la URL usando el puerto actual
+                        url = f"http://127.0.0.1:{self.successor}/set_predecessor?node_port={self.port}"
+                        response = requests.request('post', url)
+                        response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                        break
+                    except (ConnectionError, Timeout) as e:
+                        if (attempt == 3):
+                            print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                            break
+                        print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                        delay = 2**attempt
+                        time.sleep(delay)
+                    except RequestException as e:
+                        print(f"Error en la solicitud a {url}: {e}")
+                        break  # No reintentar para otros errores
 
 
     def stabilize(self):
@@ -236,12 +266,13 @@ class ChordNode:
         current_successor = self.successor
         for _ in range(TOLERANCIA):  # r es el número de sucesores a mantener
             if current_successor:
+                print(current_successor)
                 self.successor_list.append(current_successor)
-                # current_successor = make_request('get', f'/find_successor?key={current_successor}', [current_successor]).json()['port']
+                # current_successor = make_request('get', f'/find_successor?key={(int(current_successor)+1)%2**self.m}', [current_successor]).json()['port']
                 for attempt in range(4):
                     try:
                         # Construir la URL usando el puerto actual
-                        url = f"http://127.0.0.1:{current_successor}/find_successor?key={current_successor}"
+                        url = f"http://127.0.0.1:{current_successor}/find_successor?key={(int(self.hash_key(str(current_successor)))+1)%(2**self.m)}"
                         response = requests.request('get', url)
                         response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
                         current_successor = response.json()['port']
@@ -273,7 +304,7 @@ class ChordNode:
             Itera por la tabla actualizando los responsables(fingers) de los inicios de intervalos
         '''
         for i in range(self.m):
-            self.finger_table[i]['node'] = self.find_successor(self.finger_table[i]['start'])
+            self.finger_table[i]['node'] = self.find_successor(self.hash_key(str(self.finger_table[i]['start'])))
 
 
 
@@ -286,7 +317,7 @@ class ChordNode:
         '''
         if existing_node:
             self.init_finger_table(existing_node)
-            self.update_others()
+            self.send_broadcast(str(existing_node), self.port)
             self.transfer_keys()
         else:
             for i in range(self.m):
@@ -304,7 +335,7 @@ class ChordNode:
         for attempt in range(4):
             try:
                 # Construir la URL usando el puerto actual
-                url = f"http://127.0.0.1:{n_prime}/find_successor?key={self.finger_table[0]['start']}"
+                url = f"http://127.0.0.1:{n_prime}/find_successor?key={self.hash_key(str(self.finger_table[0]['start']))}"
                 response = requests.request('get', url)
                 response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
                 successor = response.json()
@@ -391,7 +422,7 @@ class ChordNode:
                 for attempt in range(4):
                     try:
                         # Construir la URL usando el puerto actual
-                        url = f"http://127.0.0.1:{n_prime}/find_successor?key={start}"
+                        url = f"http://127.0.0.1:{n_prime}/find_successor?key={self.hash_key(str(start))}"
                         response = requests.request('get', url)
                         response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
                         successor = response.json()
@@ -414,54 +445,55 @@ class ChordNode:
                 
                 self.finger_table[i+1]['node'] = successor['port']
 
-    def update_others(self):
-        for i in range(self.m):
-            # Calcular el ID del predecessor que podría necesitar actualizar su finger table
-            id = (self.node_id - 2**i) % (2**self.m)
-            predecessor = self.find_predecessor(id)
-            # Pedirle al predecessor que actualice su finger table
-            # make_request('post', f'/update_finger_table?node_port={self.port}&index={i}', [predecessor])
-            for attempt in range(4):
-                try:
-                    # Construir la URL usando el puerto actual
-                    url = f"http://127.0.0.1:{predecessor}/update_finger_table?node_port={self.port}&index={i}"
-                    response = requests.request('post', url)
-                    response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
-                    break
-                except (ConnectionError, Timeout) as e:
-                    if (attempt == 3):
-                        print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
-                        break
-                    print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
-                    delay = 2**attempt
-                    time.sleep(delay)
-                except RequestException as e:
-                    print(f"Error en la solicitud a {url}: {e}")
-                    break  # No reintentar para otros errores
-            
-            
+        
 
-    def update_finger_table(self, s, i):
-        # Verificar si el nuevo nodo s debe ser incluido en la entrada i de la finger table
-        i = int(i)
-        s_id = self.hash_key(str(s))
-        node_id = self.hash_key(str(self.finger_table[i]['node']))
-        if self.in_interval(s_id, self.node_id, node_id):
-            # Actualizar la entrada de la finger table
-            self.finger_table[i]['node'] = s
-            # Pedirle al predecessor que también actualice su finger table
-            if self.predecessor and self.predecessor != s:
-                # make_request('post', f'/update_finger_table?node_port={s}&index={i}', [self.predecessor])
+    def update_finger_table(self, n_prime):
+
+        # successor = make_request('get', f'/find_successor?key={self.finger_table[0]['start']}', [n_prime]).json()
+        for attempt in range(4):
+            try:
+                # Construir la URL usando el puerto actual
+                url = f"http://127.0.0.1:{n_prime}/find_successor?key={self.hash_key(str(self.finger_table[0]['start']))}"
+                response = requests.request('get', url)
+                response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                successor = response.json()
+                break
+            except (ConnectionError, Timeout) as e:
+                if (attempt == 3):
+                    print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                    successor = None
+                    break
+                print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
+                delay = 2**attempt
+                time.sleep(delay)
+            except RequestException as e:
+                print(f"Error en la solicitud a {url}: {e}")
+                break  # No reintentar para otros errores
+        
+        self.finger_table[0]['node'] = successor['port']
+        
+        self.successor = self.finger_table[0]['node']
+        
+        for i in range(self.m-1):
+            start = self.finger_table[i+1]['start']
+
+            node_id = self.hash_key(str(self.finger_table[i]['node']))
+            if self.in_interval(start, self.node_id, node_id):
+                self.finger_table[i+1]['node'] = self.finger_table[i]['node']
+            else:
+                # successor = make_request('get', f'/find_successor?key={start}', [n_prime]).json()
                 for attempt in range(4):
                     try:
                         # Construir la URL usando el puerto actual
-                        url = f"http://127.0.0.1:{self.predecessor}/update_finger_table?node_port={s}&index={i}"
-                        response = requests.request('post', url)
+                        url = f"http://127.0.0.1:{n_prime}/find_successor?key={self.hash_key(str(start))}"
+                        response = requests.request('get', url)
                         response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
+                        successor = response.json()
                         break
                     except (ConnectionError, Timeout) as e:
                         if (attempt == 3):
                             print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
+                            successor = None
                             break
                         print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
                         delay = 2**attempt
@@ -470,7 +502,34 @@ class ChordNode:
                         print(f"Error en la solicitud a {url}: {e}")
                         break  # No reintentar para otros errores
                 
+                self.finger_table[i+1]['node'] = successor['port']
                 
+                
+    
+    def send_broadcast(self, message, port):
+        # Crear un socket UDP
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
+        # Dirección de broadcast (generalmente 255.255.255.255)
+        broadcast_address = "255.255.255.255"
+
+        # Enviar el mensaje
+        sock.sendto(message.encode(), (broadcast_address, port))
+        print(f"Broadcast enviado: {message}")
+        sock.close()
+
+
+    def listen_for_broadcast(self, port):
+        # Crear un socket UDP
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("", port))  # Escuchar en todas las interfaces
+
+        while True:
+            data, addr = sock.recvfrom(1024)  # Buffer de 1024 bytes
+            print(f"Mensaje recibido desde {addr}: {data.decode()}")
+            if data.decode():
+                self.update_finger_table(data.decode())
 
 
     def transfer_keys(self):
@@ -697,13 +756,6 @@ def delete_keys():
     self.keys.pop(key)
     return jsonify({'status': 'updated'})
 
-@app.route('/update_finger_table', methods=['POST'])
-def update_finger_table():
-    node_port = request.args.get('node_port')
-    index = request.args.get('index')
-    node.update_finger_table(node_port, index)
-    return jsonify({'status': 'updated'})
-
 @app.route('/closest_preceding_node', methods=['GET'])
 def closest_preceding_node():
     id = request.args.get('id')
@@ -715,3 +767,4 @@ if __name__ == '__main__':
     port = int(sys.argv[1])
     node = ChordNode(port)
     app.run(port=port)
+    node.listen_for_broadcast(port)
