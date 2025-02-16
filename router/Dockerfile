@@ -7,4 +7,5 @@ RUN apk update && apk add --no-cache iproute2 iputils iptables
 RUN echo "net.ipv4.ip_forward=1" > /etc/sysctl.conf
 
 # Agregar un script para habilitar el reenvío de IP y configurar iptables al iniciar el contenedor
-CMD sysctl -p && /bin/sh
+CMD sysctl -p && tail -f /dev/null
+

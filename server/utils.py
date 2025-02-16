@@ -13,7 +13,7 @@ def is_node_alive(node_port):
     :return: True si el nodo responde, False en caso contrario.
     """
     def generate_alive_url():
-        return f'http://{node_port}/alive'
+        return f'http://192.168.1.{node_port}:5000/alive'
 
     try:
         response = retry_request(requests.get, generate_alive_url, max_attempts=1)  # Solo un intento
@@ -24,14 +24,14 @@ def is_node_alive(node_port):
 def send_broadcast(message, port):
     # Crear un socket UDP
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    # sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
     # Dirección de broadcast (generalmente 255.255.255.255)
     # broadcast_address = "255.255.255.255"
-    broadcast_address = "127.0.0.1"
+    broadcast_address = "192.168.1.255"
 
     # Enviar el mensaje
-    sock.sendto(message.encode(), (broadcast_address, port))
+    sock.sendto(message.encode(), (broadcast_address, 5000))
     print(f"Broadcast enviado: {message}")
     sock.close()
 
@@ -41,7 +41,7 @@ def listen_for_broadcast(port, function):
     """
     # Crear un socket UDP
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("", port))  # Escuchar en todas las interfaces
+    sock.bind(("", 5000))  # Escuchar en todas las interfaces
 
     while True:
         data, addr = sock.recvfrom(1024)  # Buffer de 1024 bytes

@@ -4,6 +4,9 @@ FROM python:3.9-slim
 # Establecer el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
+# Instalar las dependencias necesarias para trabajar con redes (como iproute2)
+RUN apt-get update && apt-get install -y iproute2 iputils-ping
+
 # Copiar el archivo requirements.txt al contenedor
 COPY requirements.txt .
 

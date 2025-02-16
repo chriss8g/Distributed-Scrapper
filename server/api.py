@@ -4,8 +4,7 @@ from requests.exceptions import RequestException
 from node import ChordNode
 from utils import listen_for_broadcast, hash_key, retry_request, in_interval
 from flask_cors import CORS
-
-DEEP = 2
+import socket
 
 # Inicialización del servidor Flask
 app = Flask(__name__)
@@ -19,7 +18,7 @@ def find_successor():
     return jsonify({
         'node_id': hash_key(str(successor_port)),
         'port': successor_port,
-        'address': f'http://{successor_port}'
+        'address': f'http://192.168.1.{successor_port}:5000'
     })
 
 @app.route('/join', methods=['POST'])
@@ -54,7 +53,6 @@ def fix_for_failed():
 @app.route('/store', methods=['POST'])
 def store():
     key = request.args.get('key')
-    deep = request.args.get('deep')
     hashed_key = hash_key(str(key))
     
     # Encontrar el nodo responsable usando la lógica Chord
@@ -63,9 +61,7 @@ def store():
 
     if in_interval(hashed_key, predecessor_id, current_node_id):
         # Almacenar localmente si somos responsables
-        print("epaaa")
-        # node.keys[0][hashed_key] = value
-        node.tasks.append((key, deep))
+        node.tasks.append(key)
         return jsonify({'status': 'stored'})
     else:
         # Buscar el nodo más cercano en la finger table
@@ -74,11 +70,11 @@ def store():
         if closest_node == node.port:
             # Si el más cercano somos nosotros, usar nuestro sucesor
             def generate_forward_url():
-                return f"http://{node.successor}/store?key={key}&deep={deep}"
+                return f"http://192.168.1.{node.successor}:5000/store?key={key}"
         else:
             # Reenviar al nodo más cercano encontrado
             def generate_forward_url():
-                return f"http://{closest_node}/store?key={key}&deep={deep}"
+                return f"http://192.168.1.{closest_node}:5000/store?key={key}"
 
         try:
             response = retry_request(requests.post, generate_forward_url)
@@ -110,26 +106,13 @@ def retrieve():
                 contenido = archivo.read()
             return contenido
         else:
-
-            def generate_forward_url():
-                    return f"http://{node.port}/store?key={key}&deep={DEEP}"
-
-            try:
-                response = retry_request(requests.post, generate_forward_url)
-            except RequestException as e:
-                return jsonify({'status': 'error', 'message': str(e)}), 500
-
-            if hashed_key in node.keys[0]:
-                with open(f"data/{node.port}/{hashed_key}.html", "r") as archivo:
-                    contenido = archivo.read()
-                return contenido
-            else:
-                return jsonify({'error': 'Key not found'}), 404
+            return jsonify({'error': 'Key not found'}), 404
+    
     else:
 
         # Reenviar al nodo más cercano encontrado
         def generate_url():
-            return f"http://{successor}/retrieve?key={key}"
+            return f"http://192.168.1.{successor}:5000/retrieve?key={key}"
 
         try:
             response = retry_request(requests.post, generate_url)
@@ -167,6 +150,12 @@ def closest_preceding_node():
 
 if __name__ == '__main__':
     port = 5000
-    node = ChordNode("0.0.0.0:5000")
+
+    # Obtiene el nombre del contenedor (equivalente a $HOSTNAME)
+    hostname = socket.gethostname()
+    # Resuelve el nombre del host a una dirección IP
+    ip_address = socket.gethostbyname(hostname)
+
+    node = ChordNode(ip_address.split('.')[-1])
     app.run(host='0.0.0.0', port=port)
     listen_for_broadcast(port, node.update_finger_table)

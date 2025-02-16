@@ -1,6 +1,10 @@
 # Usar una imagen base de Python 3.9 (puedes ajustar la versión según tus necesidades)
 FROM python:3.9-slim
 
+# Instalar herramientas de red necesarias como iproute2, iputils, iptables y net-tools
+RUN apt-get update && \
+    apt-get install -y iproute2 iputils-ping iptables net-tools
+
 # Establecer el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
