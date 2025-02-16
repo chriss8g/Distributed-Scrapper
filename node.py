@@ -1,49 +1,19 @@
-import hashlib
 import threading
 import time
 import requests
-from requests.exceptions import ConnectionError, Timeout, RequestException
-import socket
+from requests.exceptions import RequestException
+from utils import retry_request, send_broadcast, hash_key, in_interval, is_node_alive
 
 # Configuración global
 M = 8  # Número de bits para los identificadores
 BASE_URL = "http://127.0.0.1:{}"  # URL base para los nodos
 TOLERANCIA = 2
 
-def retry_request(action, url_generator, max_attempts=4, **kwargs):
-    """
-    Intenta realizar una solicitud HTTP con reintentos.
-    
-    :param action: Función que realiza la solicitud (e.g., requests.get, requests.post).
-    :param url_generator: Función que genera la URL en cada intento.
-    :param max_attempts: Número máximo de intentos.
-    :param kwargs: Argumentos adicionales para la función `action`.
-    :return: Respuesta de la solicitud exitosa.
-    :raises: Excepción si todos los intentos fallan.
-    """
-    for attempt in range(max_attempts):
-        try:
-            url = url_generator()  # Genera la URL actualizada
-            response = action(url, **kwargs)
-            response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
-            return response
-        except (ConnectionError, Timeout) as e:
-            if attempt == max_attempts - 1:
-                print(f"Error: No se pudo completar la solicitud después de {max_attempts} intentos.")
-                raise
-            delay = 2**attempt
-            print(f"Intento {attempt + 1} de {max_attempts}: Error de conexión o tiempo de espera. Reintentando en {delay} segundos...")
-            time.sleep(delay)
-        except RequestException as e:
-            print(f"Error en la solicitud: {e}")
-            raise
-
-
 class ChordNode:
     def __init__(self, port):
         self.m = M
         self.port = port
-        self.node_id = self.hash_key(str(port))
+        self.node_id = hash_key(str(port))
         self.finger_table = [{
             'start': (self.node_id + 2**i) % (2**self.m),
             'interval': (self.node_id + 2**i, self.node_id + 2**(i+1)),
@@ -65,31 +35,12 @@ class ChordNode:
     def __str__(self):
         return f'{self.port}'
 
-    def hash_key(self, key):
-        '''
-            hashea una key
-        '''
-        key = str(key)
-        return int(hashlib.sha1(key.encode()).hexdigest(), 16) % (2**self.m)
-
-    def in_interval(self, id, start, end):
-        '''
-            Chequea si un id pertenece al nodo con id=end
-        '''
-        end = int(end)
-        id = int(id)
-        start = int(start)
-        if start < end:
-            return start < id <= end
-        else:
-            return id > start or id <= end
-
     def find_successor(self, id):
         """
         Encuentra el sucesor de un ID dado.
         """
-        successor_id = self.hash_key(str(self.successor))
-        if self.in_interval(id, self.node_id, successor_id):
+        successor_id = hash_key(str(self.successor))
+        if in_interval(id, self.node_id, successor_id):
             return self.successor  # Si está en el rango de mi sucesor, él se lo queda
         else:
             n_prime = self.closest_preceding_node(id)  # Busca el nodo más cercano a la key y por detrás de esta
@@ -108,15 +59,14 @@ class ChordNode:
             else:
                 return self.find_successor(id)
 
-
     def find_predecessor(self, id):
         """
         Encuentra el predecesor de un ID dado.
         """
         current_node = self.port
-        successor_id = self.hash_key(str(self.successor))
+        successor_id = hash_key(str(self.successor))
 
-        while not self.in_interval(id, self.hash_key(str(current_node)), successor_id):
+        while not in_interval(id, hash_key(str(current_node)), successor_id):
             def generate_url():
                 if str(self.port) == str(current_node):
                     raise ValueError("No se necesita URL, se usa closest_preceding_node local.")
@@ -135,9 +85,9 @@ class ChordNode:
             Dada una key, busca el nodo en mi finger table q este mas cerca de la key, pero antes q esta
         '''
         for i in range(self.m-1, -1, -1):
-            node_id = self.hash_key(self.finger_table[i]['node'])
+            node_id = hash_key(self.finger_table[i]['node'])
             if self.finger_table[i]['node'] and \
-               self.in_interval(node_id, self.node_id, id):
+               in_interval(node_id, self.node_id, id):
                 return self.finger_table[i]['node']
         return self.port
 
@@ -163,7 +113,7 @@ class ChordNode:
         while True:
             time.sleep(3)
             old_successor = self.successor
-            self.successor = self.find_successor_with_replication(self.successor)
+            self.successor = self.find_successor_with_replication()
             
             if old_successor != self.successor:
                 def generate_url():
@@ -191,10 +141,10 @@ class ChordNode:
         else:
             predecessor_port = self.predecessor
 
-        successor_id = self.hash_key(str(self.successor))
-        x = self.hash_key(str(predecessor_port))
+        successor_id = hash_key(str(self.successor))
+        x = hash_key(str(predecessor_port))
 
-        if x and self.in_interval(x, self.node_id, successor_id):
+        if x and in_interval(x, self.node_id, successor_id):
             self.successor = predecessor_port
 
             if self.successor != self.port:
@@ -225,7 +175,7 @@ class ChordNode:
 
                 if str(current_successor) != str(self.port):
                     def generate_successor_url():
-                        return f"http://127.0.0.1:{current_successor}/find_successor?key={(int(self.hash_key(str(current_successor))) + 1) % (2 ** self.m)}"
+                        return f"http://127.0.0.1:{current_successor}/find_successor?key={(int(hash_key(str(current_successor))) + 1) % (2 ** self.m)}"
 
                     try:
                         response = retry_request(requests.get, generate_successor_url)
@@ -234,15 +184,15 @@ class ChordNode:
                         print(f"Error al obtener el sucesor de {current_successor}: {e}")
                         current_successor = None
                 else:
-                    current_successor = self.find_successor((int(self.hash_key(str(current_successor))) + 1) % (2 ** self.m))
+                    current_successor = self.find_successor((int(hash_key(str(current_successor))) + 1) % (2 ** self.m))
                     
     def notify(self, node):
         '''
             actualiza mi predecessor
         '''
-        predecessor_id = self.hash_key(str(self.predecessor))
-        node_id = self.hash_key(str(node))
-        if not self.predecessor or self.in_interval(node_id, predecessor_id, self.node_id):
+        predecessor_id = hash_key(str(self.predecessor))
+        node_id = hash_key(str(node))
+        if not self.predecessor or in_interval(node_id, predecessor_id, self.node_id):
             self.predecessor = node
 
     def fix_fingers(self):
@@ -252,14 +202,13 @@ class ChordNode:
         for i in range(self.m):
             self.finger_table[i]['node'] = self.find_successor(self.finger_table[i]['start'])
 
-
     def join(self, existing_node):
         """
         Une al nodo self al anillo donde ya estaba existing_node.
         """
         if existing_node:
             self.init_finger_table(existing_node)
-            self.send_broadcast(str(existing_node), self.port)
+            send_broadcast(str(existing_node), self.port)
             self.transfer_keys()
         else:
             for i in range(self.m):
@@ -318,21 +267,21 @@ class ChordNode:
             start = self.finger_table[i + 1]['start']
             node_id = self.finger_table[i]['node']
 
-            if self.in_interval(start, self.node_id, node_id):
+            if in_interval(start, self.node_id, node_id):
                 self.finger_table[i + 1]['node'] = self.finger_table[i]['node']
             else:
                 if n_prime != self.port:
                     def generate_finger_successor_url():
-                        return f"http://127.0.0.1:{n_prime}/find_successor?key={self.hash_key(str(start))}"
+                        return f"http://127.0.0.1:{n_prime}/find_successor?key={hash_key(str(start))}"
 
                     try:
                         response = retry_request(requests.get, generate_finger_successor_url)
                         successor = response.json()['port']
                     except RequestException as e:
                         print(f"Error al inicializar la finger table: {e}")
-                        successor = self.find_successor(self.hash_key(str(start)))
+                        successor = self.find_successor(hash_key(str(start)))
                 else:
-                    successor = self.find_successor(self.hash_key(str(start)))
+                    successor = self.find_successor(hash_key(str(start)))
 
                 self.finger_table[i + 1]['node'] = successor
         
@@ -361,53 +310,24 @@ class ChordNode:
             start = self.finger_table[i + 1]['start']
             node_id = self.finger_table[i]['node']
 
-            if self.in_interval(start, self.node_id, node_id):
+            if in_interval(start, self.node_id, node_id):
                 self.finger_table[i + 1]['node'] = self.finger_table[i]['node']
             else:
                 if n_prime != self.port:
                     def generate_finger_successor_url():
-                        return f"http://127.0.0.1:{n_prime}/find_successor?key={self.hash_key(str(start))}"
+                        return f"http://127.0.0.1:{n_prime}/find_successor?key={hash_key(str(start))}"
 
                     try:
                         response = retry_request(requests.get, generate_finger_successor_url)
                         successor = response.json()['port']
                     except RequestException as e:
                         print(f"Error al actualizar la finger table: {e}")
-                        successor = self.find_successor(self.hash_key(str(start)))
+                        successor = self.find_successor(hash_key(str(start)))
                 else:
-                    successor = self.find_successor(self.hash_key(str(start)))
+                    successor = self.find_successor(hash_key(str(start)))
 
                 self.finger_table[i + 1]['node'] = successor
                 
-    
-    def send_broadcast(self, message, port):
-        # Crear un socket UDP
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-
-        # Dirección de broadcast (generalmente 255.255.255.255)
-        # broadcast_address = "255.255.255.255"
-        broadcast_address = "127.0.0.1"
-
-        # Enviar el mensaje
-        sock.sendto(message.encode(), (broadcast_address, port))
-        print(f"Broadcast enviado: {message}")
-        sock.close()
-
-    def listen_for_broadcast(self, port):
-        """
-        Escucha mensajes de broadcast en un puerto específico.
-        """
-        # Crear un socket UDP
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(("", port))  # Escuchar en todas las interfaces
-
-        while True:
-            data, addr = sock.recvfrom(1024)  # Buffer de 1024 bytes
-            print(f"Mensaje recibido desde {addr}: {data.decode()}")
-            if data.decode():
-                self.update_finger_table(data.decode())
-
     def transfer_keys(self):
         """
         Transfiere las claves del predecesor al nodo actual.
@@ -425,8 +345,8 @@ class ChordNode:
 
             if keys:
                 for key in list(keys.keys()):  # Usamos list() para evitar modificar el diccionario durante la iteración
-                    predecessor_id = self.hash_key(str(self.predecessor))
-                    if self.in_interval(key, predecessor_id, self.node_id):
+                    predecessor_id = hash_key(str(self.predecessor))
+                    if in_interval(key, predecessor_id, self.node_id):
                         self.keys[key] = keys.pop(key)
 
                         def generate_delete_key_url():
@@ -448,31 +368,16 @@ class ChordNode:
                                 print(f"Error al replicar la clave {key} en el sucesor {successor_port}: {e}")
                         
 
-
-    def find_successor_with_replication(self, successor):
+    def find_successor_with_replication(self):
         """
         Encuentra un sucesor válido, utilizando la lista de sucesores como réplicas en caso de fallo.
         """
-        if self.is_node_alive(self.successor):
+        if is_node_alive(self.successor):
             return self.successor
 
         for replica_port in self.successor_list:
-            if self.is_node_alive(replica_port):
+            if is_node_alive(replica_port):
                 return replica_port
 
         return None  # Si no se encuentra ningún sucesor válido
     
-    def is_node_alive(self, node_port):
-        """
-        Verifica si un nodo está vivo haciendo una solicitud al endpoint /alive.
-        :param node_port: Puerto del nodo a verificar.
-        :return: True si el nodo responde, False en caso contrario.
-        """
-        def generate_alive_url():
-            return f'http://127.0.0.1:{node_port}/alive'
-
-        try:
-            response = retry_request(requests.get, generate_alive_url, max_attempts=1)  # Solo un intento
-            return response.status_code == 200
-        except RequestException:
-            return False

@@ -3,6 +3,7 @@ import time
 import requests
 from requests.exceptions import ConnectionError, Timeout, RequestException
 from node import ChordNode
+from utils import listen_for_broadcast, hash_key
 
 # Inicialización del servidor Flask
 app = Flask(__name__)
@@ -13,7 +14,7 @@ def find_successor():
     key = int(request.args.get('key'))
     successor_port = node.find_successor(key)
     return jsonify({
-        'node_id': node.hash_key(str(successor_port)),
+        'node_id': hash_key(str(successor_port)),
         'port': successor_port,
         'address': f'http://127.0.0.1:{successor_port}'
     })
@@ -45,10 +46,10 @@ def notify():
 def store():
     key = request.args.get('key')
     value = request.args.get('value')
-    hashed_key = node.hash_key(str(key))
+    hashed_key = hash_key(str(key))
     successor = node.find_successor(hashed_key)
 
-    if node.hash_key(str(successor)) == node.node_id:
+    if hash_key(str(successor)) == node.node_id:
         node.keys[hashed_key] = value
         return jsonify({'status': 'stored_locally'})
     else:
@@ -81,7 +82,7 @@ def replicate():
 # @app.route('/retrieve', methods=['GET'])
 # def retrieve():
 #     key = request.args.get('key')
-#     hashed_key = node.hash_key(str(key))
+#     hashed_key = hash_key(str(key))
 #     successor = node.find_successor(hashed_key)
 #     if successor.node_id == node.node_id:
 #         if hashed_key in node.keys:
@@ -123,4 +124,4 @@ if __name__ == '__main__':
     port = int(sys.argv[1])
     node = ChordNode(port)
     app.run(port=port)
-    node.listen_for_broadcast(port)
+    listen_for_broadcast(port, node.update_finger_table)
