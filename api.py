@@ -6,41 +6,10 @@ import requests
 from requests.exceptions import ConnectionError, Timeout, RequestException
 import socket
 
-# def make_request(method, endpoint, port_ref, max_retries=4, retry_delay=2, **kwargs):
-#     """
-#     Realiza una solicitud HTTP con reintentos en caso de errores de conexión.
-#     :param method: Método HTTP (get, post, put, delete, etc.).
-#     :param endpoint: Endpoint de la solicitud (por ejemplo, '/predecessor').
-#     :param port_ref: Referencia al puerto (lista de un solo elemento) para permitir actualizaciones dinámicas.
-#     :param max_retries: Número máximo de reintentos.
-#     :param retry_delay: Tiempo de espera (en segundos) entre reintentos.
-#     :param kwargs: Argumentos adicionales para requests (params, json, headers, etc.).
-#     :return: Respuesta de la solicitud o None si hay un error después de los reintentos.
-#     """
-#     for attempt in range(max_retries):
-#         try:
-#             # Construir la URL usando el puerto actual
-#             url = f"http://127.0.0.1:{port_ref[0]}{endpoint}"
-#             response = requests.request(method, url, **kwargs)
-#             response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
-#             return response
-#         except (ConnectionError, Timeout) as e:
-#             print(f"Intento {attempt + 1} de {max_retries}: Error de conexión o tiempo de espera en {url}. Reintentando en {retry_delay**attempt} segundos...")
-#             delay = retry_delay**attempt
-#             time.sleep(delay)
-#         except RequestException as e:
-#             print(f"Error en la solicitud a {url}: {e}")
-#             break  # No reintentar para otros errores
-    
-#     print(f"Error: No se pudo completar la solicitud a {url} después de {max_retries} intentos.")
-#     return None
-
-
-
 # Configuración global
 M = 8  # Número de bits para los identificadores
 BASE_URL = "http://127.0.0.1:{}"  # URL base para los nodos
-TOLERANCIA = 3
+TOLERANCIA = 2
 
 class ChordNode:
     def __init__(self, port):
@@ -72,6 +41,7 @@ class ChordNode:
         '''
             hashea una key
         '''
+        key = str(key)
         return int(hashlib.sha1(key.encode()).hexdigest(), 16) % (2**self.m)
 
     def in_interval(self, id, start, end):
@@ -164,7 +134,7 @@ class ChordNode:
             Dada una key, busca el nodo en mi finger table q este mas cerca de la key, pero antes q esta
         '''
         for i in range(self.m-1, -1, -1):
-            node_id = self.finger_table[i]['node']
+            node_id = self.hash_key(self.finger_table[i]['node'])
             if self.finger_table[i]['node'] and \
                self.in_interval(node_id, self.node_id, id):
                 return self.finger_table[i]['node']
@@ -273,7 +243,7 @@ class ChordNode:
     def update_successor_list(self):
         self.successor_list = []
         current_successor = self.successor
-        for _ in range(TOLERANCIA):  # r es el número de sucesores a mantener
+        for _ in range(TOLERANCIA+1):  # r es el número de sucesores a mantener
             if current_successor:
                 print(current_successor)
                 self.successor_list.append(current_successor)
@@ -316,7 +286,6 @@ class ChordNode:
             Itera por la tabla actualizando los responsables(fingers) de los inicios de intervalos
         '''
         for i in range(self.m):
-            print(self.finger_table[i]['start'])
             self.finger_table[i]['node'] = self.find_successor(self.finger_table[i]['start'])
 
 
@@ -334,7 +303,7 @@ class ChordNode:
             self.transfer_keys()
         else:
             for i in range(self.m):
-                self.finger_table[i]['node'] = self
+                self.finger_table[i]['node'] = self.port
             self.predecessor = self.port
             self.successor = self.port
 
@@ -534,10 +503,11 @@ class ChordNode:
     def send_broadcast(self, message, port):
         # Crear un socket UDP
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        # sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
         # Dirección de broadcast (generalmente 255.255.255.255)
-        broadcast_address = "255.255.255.255"
+        # broadcast_address = "255.255.255.255"
+        broadcast_address = "127.0.0.1"
 
         # Enviar el mensaje
         sock.sendto(message.encode(), (broadcast_address, port))
@@ -554,7 +524,6 @@ class ChordNode:
             data, addr = sock.recvfrom(1024)  # Buffer de 1024 bytes
             print(f"Mensaje recibido desde {addr}: {data.decode()}")
             if data.decode():
-                print(5645464565456)
                 self.update_finger_table(data.decode())
 
 
