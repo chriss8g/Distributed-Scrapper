@@ -53,12 +53,13 @@ def store():
 
     if in_interval(hashed_key, predecessor_id, current_node_id):
         # Almacenar localmente si somos responsables
-        node.keys[hashed_key] = value
+        # print("epaaa")
+        node.keys[0][hashed_key] = value
         
         # Replicar en los sucesores
-        for successor_port in node.successor_list[:-1]:
+        for i, successor_port in enumerate(node.successor_list[:-1]):
             def generate_replicate_url():
-                return f"http://127.0.0.1:{successor_port}/replicate"
+                return f"http://127.0.0.1:{successor_port}/replicate?id={i+1}"
             
             try:
                 retry_request(requests.post, generate_replicate_url, 
@@ -88,9 +89,15 @@ def store():
         
 @app.route('/replicate', methods=['POST'])
 def replicate():
+    id = request.args.get('id')
     key = request.json.get('key')
     value = request.json.get('value')
-    node.keys[key] = value
+    # print(node.keys)
+    # print(int(id))
+    # print(key)
+    # print(value)
+    node.keys[int(id)][key] = value
+    # print(node.keys)
     return jsonify({'status': 'replicated'})
 
 # @app.route('/retrieve', methods=['GET'])
@@ -121,10 +128,11 @@ def predecessor():
 def keys():
     return f'{node.keys}'
 
-@app.route('/keys', methods=['DELETE'])
-def delete_keys():
-    key = request.args.get('key')
-    node.keys.pop(key)
+@app.route('/keys', methods=['PUT'])
+def update_keys():
+    id = request.args.get('id')
+    data = request.json.get('data')
+    node.keys[int(id)]= data
     return jsonify({'status': 'updated'})
 
 @app.route('/closest_preceding_node', methods=['GET'])

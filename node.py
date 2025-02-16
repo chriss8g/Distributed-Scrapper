@@ -3,9 +3,11 @@ import time
 import requests
 from requests.exceptions import RequestException
 from utils import retry_request, send_broadcast, hash_key, in_interval, is_node_alive
+import copy
+import ast
 
 # Configuración global
-M = 8  # Número de bits para los identificadores
+M = 20  # Número de bits para los identificadores
 BASE_URL = "http://127.0.0.1:{}"  # URL base para los nodos
 TOLERANCIA = 2
 
@@ -22,7 +24,7 @@ class ChordNode:
         self.predecessor = self.port
         self.successor = self.port
         self.successor_list = []  # Lista de r sucesores
-        self.keys = {}
+        self.keys = [ {} for _ in range(TOLERANCIA+1) ]
 
         self.stabilize_thread = threading.Thread(target=self.stabilize_loop)
         self.stabilize_thread.daemon = True
@@ -103,7 +105,7 @@ class ChordNode:
             self.stabilize()
             self.fix_fingers()
             time.sleep(5)
-            print(self.keys)
+            print(self.keys[0], self.keys[1], self.keys[2])
 
     def check_succ_loop(self):
         """
@@ -208,6 +210,7 @@ class ChordNode:
         if existing_node:
             self.init_finger_table(existing_node)
             send_broadcast(str(existing_node), self.port)
+            time.sleep(4) # Espera a q se actualicen los sucesores
             self.transfer_keys()
         else:
             for i in range(self.m):
@@ -331,41 +334,49 @@ class ChordNode:
         """
         Transfiere las claves del predecesor al nodo actual.
         """
-        if self.predecessor:
+        if self.successor:
             def generate_keys_url():
-                return f"http://127.0.0.1:{self.predecessor}/keys"
+                return f"http://127.0.0.1:{self.successor}/keys"
 
             try:
                 response = retry_request(requests.get, generate_keys_url)
-                keys = response.json()
+                print(response.text)
+                keys = ast.literal_eval(response.text)
             except RequestException as e:
-                print(f"Error al obtener las claves del predecesor {self.predecessor}: {e}")
+                print(f"Error al obtener las claves de {self.successor}: {e}")
                 keys = None
 
             if keys:
-                for key in list(keys.keys()):  # Usamos list() para evitar modificar el diccionario durante la iteración
-                    predecessor_id = hash_key(str(self.predecessor))
-                    if in_interval(key, predecessor_id, self.node_id):
-                        self.keys[key] = keys.pop(key)
+                # acrualiza mi informacion principal
+                for key in list(keys[0].keys()): 
+                    successor_id = hash_key(str(self.successor))
+                    if not in_interval(key,  self.node_id, successor_id):
+                        self.keys[0][key] = copy.deepcopy(keys[0][key])
+                        keys[0].pop(key)
+                
+                # actualiza el resto de mis informaciones replicadas
+                self.keys[1:] = copy.deepcopy(keys[1:])
+                print("mis llaves", self.keys)
+                update_info = copy.deepcopy([keys[0]] + self.keys[:-1])
+                        
+                # Replicar la clave en los r sucesores
+                while len(self.successor_list) < TOLERANCIA:
+                    time.sleep(1)
 
-                        def generate_delete_key_url():
-                            return f"http://127.0.0.1:{self.predecessor}/keys?key={key}"
-
-                        try:
-                            retry_request(requests.delete, generate_delete_key_url)
-                        except RequestException as e:
-                            print(f"Error al eliminar la clave {key} del predecesor {self.predecessor}: {e}")
-
-                        # Replicar la clave en los r sucesores
-                        for successor_port in self.successor_list:
+                for it, successor_port in enumerate(self.successor_list):
+                    for i, data in enumerate(update_info[:-(-(len(update_info))+it)]):
+                        data = copy.deepcopy(data)
+                        print(update_info)
+                        if successor_port != self.port:
                             def generate_replicate_url():
-                                return f"http://127.0.0.1:{successor_port}/replicate"
+                                return f"http://127.0.0.1:{successor_port}/keys?id={i+it}"
 
                             try:
-                                retry_request(requests.post, generate_replicate_url, json={'key': key, 'value': self.keys[key]})
+                                retry_request(requests.put, generate_replicate_url, json={'data': data})
                             except RequestException as e:
-                                print(f"Error al replicar la clave {key} en el sucesor {successor_port}: {e}")
-                        
+                                print(f"Error al transferir datos de orden {i+it} al sucesor {successor_port}: {e}")
+                        else:
+                            self.keys[i+it] = data
 
     def find_successor_with_replication(self):
         """
