@@ -1,9 +1,8 @@
 from flask import Flask, request, jsonify
-import time
 import requests
-from requests.exceptions import ConnectionError, Timeout, RequestException
+from requests.exceptions import RequestException
 from node import ChordNode
-from utils import listen_for_broadcast, hash_key
+from utils import listen_for_broadcast, hash_key, retry_request, in_interval
 
 # Inicialización del servidor Flask
 app = Flask(__name__)
@@ -47,31 +46,46 @@ def store():
     key = request.args.get('key')
     value = request.args.get('value')
     hashed_key = hash_key(str(key))
-    successor = node.find_successor(hashed_key)
+    
+    # Encontrar el nodo responsable usando la lógica Chord
+    predecessor_id = hash_key(str(node.predecessor))
+    current_node_id = node.node_id
 
-    if hash_key(str(successor)) == node.node_id:
+    if in_interval(hashed_key, predecessor_id, current_node_id):
+        # Almacenar localmente si somos responsables
         node.keys[hashed_key] = value
+        
+        # Replicar en los sucesores
+        for successor_port in node.successor_list[:-1]:
+            def generate_replicate_url():
+                return f"http://127.0.0.1:{successor_port}/replicate"
+            
+            try:
+                retry_request(requests.post, generate_replicate_url, 
+                            json={'key': hashed_key, 'value': value})
+            except RequestException:
+                continue
+        
         return jsonify({'status': 'stored_locally'})
     else:
-        # make_request('post', f'/store', [successor], json={'key': key, 'value': value})
-        for attempt in range(4):
-            try:
-                # Construir la URL usando el puerto actual
-                url = f"http://127.0.0.1:{successor}/store"
-                response = requests.request('post', url, json={'key': key, 'value': node.keys[key]})
-                response.raise_for_status()  # Lanza una excepción para códigos de estado 4xx/5xx
-                return jsonify({'status': 'forwarded'})
-            except (ConnectionError, Timeout) as e:
-                print(f"Intento {attempt + 1} de {4}: Error de conexión o tiempo de espera en {url}. Reintentando en {2**attempt} segundos...")
-                delay = 2**attempt
-                time.sleep(delay)
-            except RequestException as e:
-                print(f"Error en la solicitud a {url}: {e}")
-                break  # No reintentar para otros errores
+        # Buscar el nodo más cercano en la finger table
+        closest_node = node.closest_preceding_node(hashed_key)
         
-        print(f"Error: No se pudo completar la solicitud a {url} después de {4} intentos.")
-        return None
+        if closest_node == node.port:
+            # Si el más cercano somos nosotros, usar nuestro sucesor
+            def generate_forward_url():
+                return f"http://127.0.0.1:{node.successor}/store?key={key}&value={value}"
+        else:
+            # Reenviar al nodo más cercano encontrado
+            def generate_forward_url():
+                return f"http://127.0.0.1:{closest_node}/store?key={key}&value={value}"
 
+        try:
+            response = retry_request(requests.post, generate_forward_url)
+            return response.json()
+        except RequestException as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+        
 @app.route('/replicate', methods=['POST'])
 def replicate():
     key = request.json.get('key')

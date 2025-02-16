@@ -103,8 +103,7 @@ class ChordNode:
             self.stabilize()
             self.fix_fingers()
             time.sleep(5)
-            print("Sucesor: ", self.successor)
-            print("Antecesor: ", self.predecessor)
+            print(self.keys)
 
     def check_succ_loop(self):
         """
@@ -168,9 +167,9 @@ class ChordNode:
         self.successor_list = []
         current_successor = self.successor
 
-        for _ in range(TOLERANCIA + 1):  # r es el número de sucesores a mantener
+        for i in range(TOLERANCIA + 1):  # r es el número de sucesores a mantener
             if current_successor:
-                print(current_successor)
+                print(f"Mi sucesor #{i} es", current_successor)
                 self.successor_list.append(current_successor)
 
                 if str(current_successor) != str(self.port):
