@@ -13,7 +13,7 @@ def is_node_alive(node_port):
     :return: True si el nodo responde, False en caso contrario.
     """
     def generate_alive_url():
-        return f'http://127.0.0.1:{node_port}/alive'
+        return f'http://{node_port}/alive'
 
     try:
         response = retry_request(requests.get, generate_alive_url, max_attempts=1)  # Solo un intento

@@ -17,7 +17,7 @@ def find_successor():
     return jsonify({
         'node_id': hash_key(str(successor_port)),
         'port': successor_port,
-        'address': f'http://127.0.0.1:{successor_port}'
+        'address': f'http://{successor_port}'
     })
 
 @app.route('/join', methods=['POST'])
@@ -72,11 +72,11 @@ def store():
         if closest_node == node.port:
             # Si el más cercano somos nosotros, usar nuestro sucesor
             def generate_forward_url():
-                return f"http://127.0.0.1:{node.successor}/store?key={key}&deep={deep}"
+                return f"http://{node.successor}/store?key={key}&deep={deep}"
         else:
             # Reenviar al nodo más cercano encontrado
             def generate_forward_url():
-                return f"http://127.0.0.1:{closest_node}/store?key={key}&deep={deep}"
+                return f"http://{closest_node}/store?key={key}&deep={deep}"
 
         try:
             response = retry_request(requests.post, generate_forward_url)
@@ -113,7 +113,7 @@ def retrieve():
 
         # Reenviar al nodo más cercano encontrado
         def generate_url():
-            return f"http://127.0.0.1:{successor}/retrieve?key={key}"
+            return f"http://{successor}/retrieve?key={key}"
 
         try:
             response = retry_request(requests.post, generate_url)
@@ -151,6 +151,6 @@ def closest_preceding_node():
 
 if __name__ == '__main__':
     port = 5000
-    node = ChordNode(port)
+    node = ChordNode("0.0.0.0:5000")
     app.run(port=port)
     listen_for_broadcast(port, node.update_finger_table)

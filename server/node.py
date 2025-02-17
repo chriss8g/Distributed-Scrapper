@@ -11,7 +11,7 @@ import os
 
 # Configuración global
 M = 160  # Número de bits para los identificadores
-BASE_URL = "http://127.0.0.1:{}"  # URL base para los nodos
+BASE_URL = "http://{}"  # URL base para los nodos
 TOLERANCIA = 2
 
 class ChordNode:
@@ -80,7 +80,7 @@ class ChordNode:
 
                     for link in links:
                         def generate_url():
-                            return f"http://127.0.0.1:{self.successor}/store?key={link}&deep={int(url[1])-1}"
+                            return f"http://{self.successor}/store?key={link}&deep={int(url[1])-1}"
 
                         try:
                             response = retry_request(requests.post, generate_url)
@@ -102,7 +102,7 @@ class ChordNode:
                 def generate_url():
                     if str(self.port) == str(n_prime):
                         raise ValueError("No se necesita URL, se usa find_predecessor local.")
-                    return f"http://127.0.0.1:{n_prime}/find_successor?key={id}"
+                    return f"http://{n_prime}/find_successor?key={id}"
 
                 try:
                     response = retry_request(requests.get, generate_url)
@@ -123,7 +123,7 @@ class ChordNode:
             def generate_url():
                 if str(self.port) == str(current_node):
                     raise ValueError("No se necesita URL, se usa closest_preceding_node local.")
-                return f"http://127.0.0.1:{current_node}/closest_preceding_node?id={id}"
+                return f"http://{current_node}/closest_preceding_node?id={id}"
 
             try:
                 response = retry_request(requests.get, generate_url)
@@ -177,7 +177,7 @@ class ChordNode:
 
             if new_successor != old_successor:
                 def generate_url():
-                    return f"http://127.0.0.1:{new_successor}/fix_for_failed?node_id={self.node_id}"
+                    return f"http://{new_successor}/fix_for_failed?node_id={self.node_id}"
 
                 try:
                     retry_request(requests.post, generate_url)
@@ -189,7 +189,7 @@ class ChordNode:
             
             if old_successor != self.successor:
                 def generate_url():
-                    return f"http://127.0.0.1:{self.successor}/set_predecessor?node_port={self.port}"
+                    return f"http://{self.successor}/set_predecessor?node_port={self.port}"
 
                 try:
                     retry_request(requests.post, generate_url)
@@ -202,7 +202,7 @@ class ChordNode:
         """
         if self.finger_table[0]['node'] != self.port:
             def generate_predecessor_url():
-                return f"http://127.0.0.1:{self.successor}/predecessor"
+                return f"http://{self.successor}/predecessor"
 
             try:
                 response = retry_request(requests.get, generate_predecessor_url)
@@ -221,7 +221,7 @@ class ChordNode:
 
             if self.successor != self.port:
                 def generate_notify_url():
-                    return f"http://127.0.0.1:{self.successor}/notify?port={self.port}"
+                    return f"http://{self.successor}/notify?port={self.port}"
 
                 try:
                     retry_request(requests.post, generate_notify_url)
@@ -244,7 +244,7 @@ class ChordNode:
             # Escribiendo mi informacion en la i-esima data de mi sucesor
             if current_successor != self.port:
                 def generate_replicate_url():
-                    return f"http://127.0.0.1:{current_successor}/keys?id={i+1}"
+                    return f"http://{current_successor}/keys?id={i+1}"
 
                 try:
                     retry_request(requests.put, generate_replicate_url, json={'data': self.keys[i]})
@@ -262,7 +262,7 @@ class ChordNode:
                 # Busca el nuevo sucesor
                 if str(current_successor) != str(self.port):
                     def generate_successor_url():
-                        return f"http://127.0.0.1:{current_successor}/find_successor?key={(int(hash_key(str(current_successor))) + 1) % (2 ** self.m)}"
+                        return f"http://{current_successor}/find_successor?key={(int(hash_key(str(current_successor))) + 1) % (2 ** self.m)}"
 
                     try:
                         response = retry_request(requests.get, generate_successor_url)
@@ -312,7 +312,7 @@ class ChordNode:
         """
         if n_prime != self.port:
             def generate_successor_url():
-                return f"http://127.0.0.1:{n_prime}/find_successor?key={self.finger_table[0]['start']}"
+                return f"http://{n_prime}/find_successor?key={self.finger_table[0]['start']}"
 
             try:
                 response = retry_request(requests.get, generate_successor_url)
@@ -327,7 +327,7 @@ class ChordNode:
 
         if self.finger_table[0]['node'] != self.port:
             def generate_predecessor_url():
-                return f"http://127.0.0.1:{self.finger_table[0]['node']}/predecessor"
+                return f"http://{self.finger_table[0]['node']}/predecessor"
 
             try:
                 response = retry_request(requests.get, generate_predecessor_url)
@@ -342,7 +342,7 @@ class ChordNode:
 
         if self.finger_table[0]['node'] != self.port:
             def generate_set_predecessor_url():
-                return f"http://127.0.0.1:{self.finger_table[0]['node']}/set_predecessor?node_port={self.port}"
+                return f"http://{self.finger_table[0]['node']}/set_predecessor?node_port={self.port}"
 
             try:
                 retry_request(requests.post, generate_set_predecessor_url)
@@ -360,7 +360,7 @@ class ChordNode:
             else:
                 if n_prime != self.port:
                     def generate_finger_successor_url():
-                        return f"http://127.0.0.1:{n_prime}/find_successor?key={hash_key(str(start))}"
+                        return f"http://{n_prime}/find_successor?key={hash_key(str(start))}"
 
                     try:
                         response = retry_request(requests.get, generate_finger_successor_url)
@@ -380,7 +380,7 @@ class ChordNode:
         """
         if n_prime != self.port:
             def generate_successor_url():
-                return f"http://127.0.0.1:{n_prime}/find_successor?key={self.finger_table[0]['start']}"
+                return f"http://{n_prime}/find_successor?key={self.finger_table[0]['start']}"
 
             try:
                 response = retry_request(requests.get, generate_successor_url)
@@ -403,7 +403,7 @@ class ChordNode:
             else:
                 if n_prime != self.port:
                     def generate_finger_successor_url():
-                        return f"http://127.0.0.1:{n_prime}/find_successor?key={hash_key(str(start))}"
+                        return f"http://{n_prime}/find_successor?key={hash_key(str(start))}"
 
                     try:
                         response = retry_request(requests.get, generate_finger_successor_url)
@@ -422,7 +422,7 @@ class ChordNode:
         """
         if self.successor:
             def generate_keys_url():
-                return f"http://127.0.0.1:{self.successor}/keys"
+                return f"http://{self.successor}/keys"
 
             try:
                 response = retry_request(requests.get, generate_keys_url)
@@ -453,7 +453,7 @@ class ChordNode:
                         data = copy.deepcopy(data)
                         if successor_port != self.port:
                             def generate_replicate_url():
-                                return f"http://127.0.0.1:{successor_port}/keys?id={i+it}"
+                                return f"http://{successor_port}/keys?id={i+it}"
 
                             try:
                                 retry_request(requests.put, generate_replicate_url, json={'data': data})

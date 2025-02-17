@@ -8,6 +8,7 @@ SERVER_IMAGE="scraper-server-image"
 CLIENT_IMAGE="scraper-client-image"
 ROUTER_IMAGE="scraper-router-image"
 CLIENT_PORTS=(8080 8081)  # Puertos del host para mapear a los clientes
+SERVER_PORTS=(8000 8001 8002 8003 8004 8005)  # Puertos del host para mapear a los clientes
 
 # Paso 1: Verificar y crear las redes Docker
 echo "Verificando y creando redes Docker..."
@@ -47,11 +48,7 @@ else
 fi
 
 # Paso 3: Detener y eliminar contenedores existentes
-echo "Deteniendo y eliminando contenedores existentes..."
-for container in $(docker ps -aq --filter name="scraper-"); do
-  docker stop $container
-  docker rm $container
-done
+docker ps -aq --filter name="scraper-" | xargs -r docker rm -f
 
 # Paso 4: Iniciar el router
 echo "Iniciando el router..."
@@ -68,9 +65,12 @@ docker network connect $NETWORK_CLIENT $ROUTER_CONTAINER --ip 192.168.2.2
 echo "Iniciando servidores..."
 for i in {1..1}; do
   SERVER_CONTAINER="scraper-server-$i"
+  HOST_PORT=${SERVER_PORTS[$i]}
   docker run -d --name $SERVER_CONTAINER \
     --network $NETWORK_SERVER \
     --ip 192.168.1.$((i + 2)) \
+    -v "$(pwd)/server:/app/src" \
+    -p $HOST_PORT:5000 \
     $SERVER_IMAGE
 done
 
@@ -86,21 +86,22 @@ done
 
 # Paso 7: Iniciar clientes con mapeo de puertos
 echo "Iniciando clientes con mapeo de puertos..."
-for i in {0..1}; do  # Índices 0 y 1 para 2 clientes
+for i in {0..0}; do  # Índices 0 y 1 para 2 clientes
   CLIENT_CONTAINER="scraper-client-$((i+1))"
   HOST_PORT=${CLIENT_PORTS[$i]}
   echo "Cliente $CLIENT_CONTAINER accesible en puerto $HOST_PORT"
-  docker run -d --name $CLIENT_CONTAINER \
+  docker run --rm -d --name $CLIENT_CONTAINER \
     --network $NETWORK_CLIENT \
     --ip 192.168.2.$((i + 3)) \
-    -p $HOST_PORT:3000 \  # Mapea puerto del host al puerto 3000 del contenedor
+    -v "$(pwd)/client:/app/src" \
+    -p $HOST_PORT:3000 \
     $CLIENT_IMAGE
 done
 
 # Paso 8: Configurar enrutamiento (sin cambios)
 echo "Configurando enrutamiento para los clientes..."
-for i in {1..2}; do
-  CLIENT_CONTAINER="client-$i"
+for i in {1..1}; do
+  CLIENT_CONTAINER="scraper-client-$i"
   docker exec $CLIENT_CONTAINER sh -c "ip route add 192.168.1.0/24 via 192.168.2.2"
 done
 
