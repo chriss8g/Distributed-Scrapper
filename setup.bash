@@ -7,6 +7,7 @@ ROUTER_CONTAINER="scraper-router"
 SERVER_IMAGE="scraper-server-image"
 CLIENT_IMAGE="scraper-client-image"
 ROUTER_IMAGE="scraper-router-image"
+CLIENT_PORTS=(8080 8081)  # Puertos del host para mapear a los clientes
 
 # Paso 1: Verificar y crear las redes Docker
 echo "Verificando y creando redes Docker..."
@@ -65,8 +66,8 @@ docker network connect $NETWORK_CLIENT $ROUTER_CONTAINER --ip 192.168.2.2
 
 # Paso 5: Iniciar los servidores
 echo "Iniciando servidores..."
-for i in {1..5}; do
-  SERVER_CONTAINER="server-$i"
+for i in {1..1}; do
+  SERVER_CONTAINER="scraper-server-$i"
   docker run -d --name $SERVER_CONTAINER \
     --network $NETWORK_SERVER \
     --ip 192.168.1.$((i + 2)) \
@@ -75,7 +76,7 @@ done
 
 # Paso 6: Unir los servidores al sistema distribuido
 echo "Uniendo servidores al sistema distribuido..."
-for i in {1..5}; do
+for i in {1..1}; do
   SERVER_IP="192.168.1.$((i + 2))"
   echo "Enviando solicitud al servidor $SERVER_IP..."
   curl -X POST http://$SERVER_IP:5000/join \
@@ -83,17 +84,20 @@ for i in {1..5}; do
         -d '{"ip": "192.168.1.3"}'
 done
 
-# Paso 7: Iniciar los clientes
-echo "Iniciando clientes..."
-for i in {1..2}; do
-  CLIENT_CONTAINER="client-$i"
+# Paso 7: Iniciar clientes con mapeo de puertos
+echo "Iniciando clientes con mapeo de puertos..."
+for i in {0..1}; do  # Índices 0 y 1 para 2 clientes
+  CLIENT_CONTAINER="scraper-client-$((i+1))"
+  HOST_PORT=${CLIENT_PORTS[$i]}
+  echo "Cliente $CLIENT_CONTAINER accesible en puerto $HOST_PORT"
   docker run -d --name $CLIENT_CONTAINER \
     --network $NETWORK_CLIENT \
-    --ip 192.168.2.$((i + 2)) \
+    --ip 192.168.2.$((i + 3)) \
+    -p $HOST_PORT:3000 \  # Mapea puerto del host al puerto 3000 del contenedor
     $CLIENT_IMAGE
 done
 
-# Paso 8: Configurar el enrutamiento para los clientes
+# Paso 8: Configurar enrutamiento (sin cambios)
 echo "Configurando enrutamiento para los clientes..."
 for i in {1..2}; do
   CLIENT_CONTAINER="client-$i"
@@ -101,3 +105,6 @@ for i in {1..2}; do
 done
 
 echo "Configuración completada."
+echo -e "\nAccede a las aplicaciones web en:"
+echo " - Cliente 1: http://localhost:${CLIENT_PORTS[0]}"
+echo " - Cliente 2: http://localhost:${CLIENT_PORTS[1]}"

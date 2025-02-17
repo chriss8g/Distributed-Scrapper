@@ -150,8 +150,7 @@ def closest_preceding_node():
     return f'{response}'
 
 if __name__ == '__main__':
-    import sys
-    port = int(sys.argv[1])
+    port = 5000
     node = ChordNode(port)
     app.run(port=port)
     listen_for_broadcast(port, node.update_finger_table)
