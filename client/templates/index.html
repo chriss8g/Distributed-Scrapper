@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Scraping Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-top: 20px;
+        }
+
+        #scrape-form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px 0;
+        }
+
+        #scrape-form input[type="url"] {
+            width: 300px;
+            padding: 10px;
+            margin: 5px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        #scrape-form .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        #scrape-form button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+        }
+
+        #scrape-form button:hover {
+            background-color: #0056b3;
+        }
+
+        #save-button {
+            background-color: #28a745;
+        }
+
+        #save-button:hover {
+            background-color: #218838;
+        }
+
+        #info-container {
+            padding: 20px;
+        }
+
+        .info-section {
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .info-section h2 {
+            color: #007BFF;
+        }
+
+        #html-content iframe {
+            width: 100%;
+            height: 500px;
+            border: none;
+            background: #f9f9f9;
+        }
+
+        .info-section div {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .info-section div p, .info-section div a {
+            margin: 0;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .info-section div a {
+            display: block;
+            text-decoration: none;
+            color: #007BFF;
+        }
+
+        .info-section div a:hover {
+            text-decoration: underline;
+        }
+
+        .spinner {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .spinner img {
+            width: 50px;
+            height: 50px;
+        }
+
+        .preview {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Web Scraping Tool</h1>
+    <form id="scrape-form">
+        <input type="url" id="url" placeholder="Enter a URL..." required />
+        <div class="button-group">
+            <button type="button" id="view-html">Buscar</button>
+        </div>
+    </form>
+    <div class="spinner" id="loading-spinner">
+        <img src="https://i.imgur.com/llF5iyg.gif" alt="Loading...">
+        <p>Loading...</p>
+    </div>
+    <div id="info-container">
+        <div id="html-section" class="info-section">
+            <h2>Buscar</h2>
+            <div id="html-content">
+                <iframe title="HTML Viewer"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const spinner = document.getElementById('loading-spinner');
+
+        const toggleSpinner = (show) => {
+            spinner.style.display = show ? 'block' : 'none';
+        };
+
+        const sections = {
+            html: document.getElementById('html-section'),
+        };
+
+        const buttons = {
+            html: document.getElementById('view-html'),
+        };
+
+        const toggleSection = (sectionName) => {
+            Object.keys(sections).forEach((key) => {
+                sections[key].style.display = key === sectionName ? 'block' : 'none';
+            });
+        };
+
+        const fetchScrapedData = async (url, type) => {
+            try {
+                toggleSpinner(true);
+                const response = await fetch(`http://10.0.11.2:5000/retrieve?key=${encodeURIComponent(url)}`);
+                if (!response.ok) throw new Error(`Error ${response.status}: ${response.statusText}`);
+                return await response.json();
+            } catch (error) {
+                alert("Error fetching data: " + error.message);
+                throw error;
+            } finally {
+                toggleSpinner(false);
+            }
+        };
+
+        const handleScrape = async (type) => {
+            const url = document.getElementById('url').value;
+            if (!url) {
+                alert('Please enter a URL.');
+                return;
+            }
+
+            try {
+                const data = await fetchScrapedData(url, type);
+
+                if (type === 'html') {
+                    const iframe = document.querySelector('#html-content iframe');
+                    const iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
+                    iframeDocument.open();
+                    iframeDocument.write(data.html || 'No HTML content found.');
+                    iframeDocument.close();
+                }
+                toggleSection(type);
+            } catch {
+                // Error already handled
+            }
+        };
+
+        buttons.html.addEventListener('click', () => handleScrape('html'));
+
+    </script>
+</body>
+</html>
