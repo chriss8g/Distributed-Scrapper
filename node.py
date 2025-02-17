@@ -50,25 +50,29 @@ class ChordNode:
             if self.tasks:
                 url = self.tasks.pop()
                 
-                if url[1] > 0:
+                if int(url[1]) > 0:
                     def generate_url():
                         return url[0]
                     try:
                         response = retry_request(requests.get, generate_url)
-                        self.keys[0][hash_key(url[0])] = response.text
+                        self.keys[0][hash_key(url[0])] = url[0]
                         # Abrir el archivo en modo escritura ('w')
-                        with open(f"{self.port}/{url[0]}.html", "w") as archivo:
+                        with open(f"data/{self.port}/{hash_key(url[0])}.html", "w") as archivo:
                             archivo.write(response.text)
 
                     except Exception as e:
                         print(f"Error al scrapear {url[0]}: {e}")
 
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    links = [urljoin(url, a['href']) for a in soup.find_all('a', href=True)]
-                    
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    links = [urljoin(url[0], a['href']) for a in soup.find_all('a', href=True)]
+                    # for link in links:
+                    #     with open(f"links.txt", "a") as archivo:
+                    #             archivo.write(link)
+
+
                     for link in links:
                         def generate_url():
-                            return f"http://127.0.0.1:{self.successor}/store?key={url}&deep={int(url[1])-1}"
+                            return f"http://127.0.0.1:{self.successor}/store?key={link}&deep={int(url[1])-1}"
 
                         try:
                             response = retry_request(requests.post, generate_url)
