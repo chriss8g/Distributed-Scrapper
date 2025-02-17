@@ -7,6 +7,7 @@ import copy
 import ast
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
+import os
 
 # Configuración global
 M = 160  # Número de bits para los identificadores
@@ -56,8 +57,15 @@ class ChordNode:
                     try:
                         response = retry_request(requests.get, generate_url)
                         self.keys[0][hash_key(url[0])] = url[0]
-                        # Abrir el archivo en modo escritura ('w')
-                        with open(f"data/{self.port}/{hash_key(url[0])}.html", "w") as archivo:
+                        
+                        # Crear la ruta completa de la carpeta
+                        ruta_carpeta = f"data/{self.port}"
+                        ruta_archivo = f"{ruta_carpeta}/{hash_key(url[0])}.html"
+
+                        # Crear las carpetas intermedias si no existen
+                        os.makedirs(ruta_carpeta, exist_ok=True)
+
+                        with open(ruta_archivo, "w") as archivo:
                             archivo.write(response.text)
 
                     except Exception as e:

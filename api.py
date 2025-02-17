@@ -53,7 +53,6 @@ def fix_for_failed():
 def store():
     key = request.args.get('key')
     deep = request.args.get('deep')
-    deep = deep if deep else DEEP
     hashed_key = hash_key(str(key))
     
     # Encontrar el nodo responsable usando la lógica Chord
@@ -98,19 +97,30 @@ def replicate():
     # print(node.keys)
     return jsonify({'status': 'replicated'})
 
-# @app.route('/retrieve', methods=['GET'])
-# def retrieve():
-#     key = request.args.get('key')
-#     hashed_key = hash_key(str(key))
-#     successor = node.find_successor(hashed_key)
-#     if successor.node_id == node.node_id:
-#         if hashed_key in node.keys:
-#             return jsonify({'value': node.keys[hashed_key]})
-#         else:
-#             return jsonify({'error': 'Key not found'}), 404
-#     else:
-#         response = make_request('get', f'/retrieve?key={key}', [successor.port])
-#         return response.json()
+@app.route('/retrieve', methods=['GET'])
+def retrieve():
+    key = request.args.get('key')
+    hashed_key = hash_key(str(key))
+    successor = node.find_successor(hashed_key)
+    if hash_key(str(successor)) == node.node_id:
+        if hashed_key in node.keys[0]:
+            with open(f"data/{node.port}/{hashed_key}.html", "r") as archivo:
+                contenido = archivo.read()
+            return contenido
+        else:
+            return jsonify({'error': 'Key not found'}), 404
+    else:
+
+        # Reenviar al nodo más cercano encontrado
+        def generate_url():
+            return f"http://127.0.0.1:{successor}/retrieve?key={key}"
+
+        try:
+            response = retry_request(requests.post, generate_url)
+            return response.text
+        except RequestException as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 500
+        
 
 @app.route('/set_predecessor', methods=['POST'])
 def set_predecessor():
