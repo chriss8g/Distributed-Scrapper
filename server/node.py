@@ -381,7 +381,7 @@ class ChordNode:
             start = self.finger_table[i + 1]['start']
             node_id = self.finger_table[i]['node']
 
-            if in_interval(start, self.node_id, node_id):
+            if in_interval(start, self.node_id, hash_key(node_id)):
                 self.finger_table[i + 1]['node'] = self.finger_table[i]['node']
             else:
                 if n_prime != self.port:
