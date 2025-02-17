@@ -3,11 +3,13 @@ import requests
 from requests.exceptions import RequestException
 from node import ChordNode
 from utils import listen_for_broadcast, hash_key, retry_request, in_interval
+from flask_cors import CORS
 
 DEEP = 2
 
 # Inicialización del servidor Flask
 app = Flask(__name__)
+CORS(app)
 node = None
 
 @app.route('/find_successor', methods=['GET'])
@@ -22,8 +24,8 @@ def find_successor():
 
 @app.route('/join', methods=['POST'])
 def join():
-    existing_port = int(request.json.get('port'))
-    if existing_port != node.port:
+    existing_port = str(request.json.get('port'))
+    if existing_port != str(node.port):
         existing_node = existing_port  # Función auxiliar para obtener nodos
     else:
         existing_node = None
@@ -108,7 +110,21 @@ def retrieve():
                 contenido = archivo.read()
             return contenido
         else:
-            return jsonify({'error': 'Key not found'}), 404
+
+            def generate_forward_url():
+                    return f"http://{node.port}/store?key={key}&deep={DEEP}"
+
+            try:
+                response = retry_request(requests.post, generate_forward_url)
+            except RequestException as e:
+                return jsonify({'status': 'error', 'message': str(e)}), 500
+
+            if hashed_key in node.keys[0]:
+                with open(f"data/{node.port}/{hashed_key}.html", "r") as archivo:
+                    contenido = archivo.read()
+                return contenido
+            else:
+                return jsonify({'error': 'Key not found'}), 404
     else:
 
         # Reenviar al nodo más cercano encontrado
@@ -152,5 +168,5 @@ def closest_preceding_node():
 if __name__ == '__main__':
     port = 5000
     node = ChordNode("0.0.0.0:5000")
-    app.run(port=port)
+    app.run(host='0.0.0.0', port=port)
     listen_for_broadcast(port, node.update_finger_table)

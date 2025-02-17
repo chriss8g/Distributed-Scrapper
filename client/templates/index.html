@@ -171,7 +171,7 @@
         const fetchScrapedData = async (url, type) => {
             try {
                 toggleSpinner(true);
-                const response = await fetch(`http://10.0.11.2:5000/retrieve?key=${encodeURIComponent(url)}`);
+                const response = await fetch(`http://localhost:8000/retrieve?key=${encodeURIComponent(url)}`);
                 if (!response.ok) throw new Error(`Error ${response.status}: ${response.statusText}`);
                 return await response.json();
             } catch (error) {

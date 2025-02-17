@@ -11,18 +11,18 @@ CLIENT_PORTS=(8080 8081)  # Puertos del host para mapear a los clientes
 SERVER_PORTS=(8000 8001 8002 8003 8004 8005)  # Puertos del host para mapear a los clientes
 
 # Paso 1: Verificar y crear las redes Docker
-echo "Verificando y creando redes Docker..."
-if ! docker network inspect $NETWORK_SERVER &>/dev/null; then
-  docker network create $NETWORK_SERVER --subnet=192.168.1.0/24
-else
-  echo "La red $NETWORK_SERVER ya existe."
-fi
+# echo "Verificando y creando redes Docker..."
+# if ! docker network inspect $NETWORK_SERVER &>/dev/null; then
+#   docker network create $NETWORK_SERVER --subnet=192.168.1.0/24
+# else
+#   echo "La red $NETWORK_SERVER ya existe."
+# fi
 
-if ! docker network inspect $NETWORK_CLIENT &>/dev/null; then
-  docker network create $NETWORK_CLIENT --subnet=192.168.2.0/24
-else
-  echo "La red $NETWORK_CLIENT ya existe."
-fi
+# if ! docker network inspect $NETWORK_CLIENT &>/dev/null; then
+#   docker network create $NETWORK_CLIENT --subnet=192.168.2.0/24
+# else
+#   echo "La red $NETWORK_CLIENT ya existe."
+# fi
 
 # Paso 2: Verificar y construir las imágenes
 echo "Verificando y construyendo imágenes..."
@@ -40,35 +40,35 @@ else
   echo "La imagen $CLIENT_IMAGE ya existe."
 fi
 
-if ! docker images --format "{{.Repository}}" | grep -q $ROUTER_IMAGE; then
-  echo "Construyendo imagen del router..."
-  docker build -t $ROUTER_IMAGE ./router
-else
-  echo "La imagen $ROUTER_IMAGE ya existe."
-fi
+# if ! docker images --format "{{.Repository}}" | grep -q $ROUTER_IMAGE; then
+#   echo "Construyendo imagen del router..."
+#   docker build -t $ROUTER_IMAGE ./router
+# else
+#   echo "La imagen $ROUTER_IMAGE ya existe."
+# fi
 
 # Paso 3: Detener y eliminar contenedores existentes
 docker ps -aq --filter name="scraper-" | xargs -r docker rm -f
 
-# Paso 4: Iniciar el router
-echo "Iniciando el router..."
-docker run -d --name $ROUTER_CONTAINER \
-  --privileged \
-  --network $NETWORK_SERVER \
-  --ip 192.168.1.2 \
-  $ROUTER_IMAGE
+# # Paso 4: Iniciar el router
+# echo "Iniciando el router..."
+# docker run -d --name $ROUTER_CONTAINER \
+#   --privileged \
+#   --network $NETWORK_SERVER \
+#   --ip 192.168.1.2 \
+#   $ROUTER_IMAGE
 
 # Conectar el router a la red de clientes
 docker network connect $NETWORK_CLIENT $ROUTER_CONTAINER --ip 192.168.2.2
 
 # Paso 5: Iniciar los servidores
 echo "Iniciando servidores..."
-for i in {1..1}; do
+for i in {0..5}; do
   SERVER_CONTAINER="scraper-server-$i"
   HOST_PORT=${SERVER_PORTS[$i]}
+  # --network $NETWORK_SERVER \
+  # --ip 192.168.1.$((i + 2)) \
   docker run -d --name $SERVER_CONTAINER \
-    --network $NETWORK_SERVER \
-    --ip 192.168.1.$((i + 2)) \
     -v "$(pwd)/server:/app/src" \
     -p $HOST_PORT:5000 \
     $SERVER_IMAGE
@@ -76,12 +76,14 @@ done
 
 # Paso 6: Unir los servidores al sistema distribuido
 echo "Uniendo servidores al sistema distribuido..."
-for i in {1..1}; do
-  SERVER_IP="192.168.1.$((i + 2))"
+for i in {0..5}; do
+  # SERVER_IP="192.168.1.$((i + 2))"
+  HOST_PORT=${SERVER_PORTS[$i]}
+  SERVER_IP="localhost:$HOST_PORT"
   echo "Enviando solicitud al servidor $SERVER_IP..."
-  curl -X POST http://$SERVER_IP:5000/join \
+  curl -X POST http://$SERVER_IP/join \
         -H "Content-Type: application/json" \
-        -d '{"ip": "192.168.1.3"}'
+        -d '{"port": "0.0.0.0:5000"}'
 done
 
 # Paso 7: Iniciar clientes con mapeo de puertos
@@ -98,12 +100,12 @@ for i in {0..0}; do  # Índices 0 y 1 para 2 clientes
     $CLIENT_IMAGE
 done
 
-# Paso 8: Configurar enrutamiento (sin cambios)
-echo "Configurando enrutamiento para los clientes..."
-for i in {1..1}; do
-  CLIENT_CONTAINER="scraper-client-$i"
-  docker exec $CLIENT_CONTAINER sh -c "ip route add 192.168.1.0/24 via 192.168.2.2"
-done
+# # Paso 8: Configurar enrutamiento (sin cambios)
+# echo "Configurando enrutamiento para los clientes..."
+# for i in {1..1}; do
+#   CLIENT_CONTAINER="scraper-client-$i"
+#   docker exec $CLIENT_CONTAINER sh -c "ip route add 192.168.1.0/24 via 192.168.2.2"
+# done
 
 echo "Configuración completada."
 echo -e "\nAccede a las aplicaciones web en:"
